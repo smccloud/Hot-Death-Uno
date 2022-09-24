@@ -1,4 +1,4 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
 import android.app.Dialog;
 import android.content.Context;

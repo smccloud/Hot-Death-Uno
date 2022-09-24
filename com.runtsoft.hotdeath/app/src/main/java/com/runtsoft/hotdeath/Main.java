@@ -1,4 +1,4 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
 
 import android.app.Activity;
@@ -13,7 +13,7 @@ import android.widget.TextView;
 import android.text.method.ScrollingMovementMethod;
 
 
-import com.smorgasbork.hotdeath.R;
+import com.runtsoft.hotdeath.R;
 
 public class Main extends Activity implements OnClickListener 
 {

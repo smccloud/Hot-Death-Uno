@@ -1,4 +1,4 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
 import java.util.Random;
 import org.json.*;

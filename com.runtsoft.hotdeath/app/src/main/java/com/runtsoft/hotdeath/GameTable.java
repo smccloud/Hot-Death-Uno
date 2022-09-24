@@ -1,4 +1,4 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
 
 import android.os.Handler;
@@ -17,7 +17,7 @@ import java.util.HashMap;
 
 import android.graphics.*;
 import android.content.res.Resources;
-import com.smorgasbork.hotdeath.R;
+import com.runtsoft.hotdeath.R;
 
 
 public class GameTable extends View 

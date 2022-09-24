@@ -1,6 +1,5 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
-import com.smorgasbork.hotdeath.Card;
 import java.util.Random;
 
 import org.json.JSONArray;

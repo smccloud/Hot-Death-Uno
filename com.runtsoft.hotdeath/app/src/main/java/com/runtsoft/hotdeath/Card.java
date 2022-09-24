@@ -1,9 +1,9 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
 import org.json.*;
 
 import android.content.Context;
-import com.smorgasbork.hotdeath.R;
+import com.runtsoft.hotdeath.R;
 
 public class Card {
 

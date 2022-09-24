@@ -1,9 +1,9 @@
-package com.smorgasbork.hotdeath;
+package com.runtsoft.hotdeath;
 
 import java.util.Random;
 import android.util.Log;
 
-import com.smorgasbork.hotdeath.R;
+import com.runtsoft.hotdeath.R;
 import org.json.*;
 
 public class Game extends Thread {

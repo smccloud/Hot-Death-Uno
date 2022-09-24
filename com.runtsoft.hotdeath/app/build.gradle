@@ -85,5 +85,5 @@ android {
             versionNameSuffix = 'g'
         }
     }
-    namespace 'com.smorgasbork.hotdeath'
+    namespace 'com.runtsoft.hotdeath'
 }

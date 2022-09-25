@@ -1,10 +1,14 @@
 package com.runtsoft.hotdeath;
 
-import java.util.Random;
 import android.util.Log;
 
 import com.runtsoft.hotdeath.R;
-import org.json.*;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.Random;
 
 public class Game extends Thread {
 	public static final int MAX_NUM_CARDS = 216;
@@ -186,7 +190,7 @@ public class Game extends Thread {
 		// on the second call, we'll really shut down; but also be careful
 		// in case we get called more than two times...
 		Log.d("HDU", "Game thread nulling out references and exiting...");
-    	if  (m_gt != null)
+		if  (m_gt != null)
     	{
     		m_gt.shutdown ();
     		m_go.shutdown ();

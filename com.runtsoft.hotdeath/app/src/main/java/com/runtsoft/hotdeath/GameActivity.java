@@ -2,22 +2,24 @@ package com.runtsoft.hotdeath;
 
 
 import android.app.Activity;
-import org.json.*;
+import android.app.Dialog;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.app.Dialog;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.view.View;
-import android.widget.GridView;
+import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
-import android.view.*;
-import android.widget.ImageView;
-import android.widget.TextView;
-import android.widget.RelativeLayout;
-import android.widget.RelativeLayout.*;
 import android.widget.Button;
+import android.widget.GridView;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
+import android.widget.RelativeLayout.LayoutParams;
+import android.widget.TextView;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class GameActivity extends Activity 
 {
@@ -81,7 +83,7 @@ public class GameActivity extends Activity
 	    	JSONObject o;
 	    	try
 	    	{
-		    	o = new JSONObject (s);	    	
+				o = new JSONObject (s);
 				m_game = new Game (o, this, m_go);
 	    	}
 	    	catch (JSONException e)
@@ -104,8 +106,8 @@ public class GameActivity extends Activity
 		m_btnFastForward = (Button)getLayoutInflater().inflate(R.layout.action_button, null);
 	    m_btnFastForward.setText(getString(R.string.lbl_fast_forward));
 	    m_btnFastForward.setId(View.generateViewId());
-	    m_btnFastForward.setVisibility(View.INVISIBLE);
-	    m_btnFastForward.setOnClickListener (new View.OnClickListener() {
+		m_btnFastForward.setVisibility(View.INVISIBLE);
+		m_btnFastForward.setOnClickListener (new View.OnClickListener() {
 			
 			@Override
 			public void onClick(View v) {
@@ -241,10 +243,10 @@ public class GameActivity extends Activity
     protected void onDestroy() {
     	m_game.shutdown ();
     	m_game = null;
-    	m_gt = null;
-       	m_go = null;
-    	
-    	super.onDestroy ();
+		m_gt = null;
+		m_go = null;
+
+		super.onDestroy ();
     };
     
     public void showCardHelp ()

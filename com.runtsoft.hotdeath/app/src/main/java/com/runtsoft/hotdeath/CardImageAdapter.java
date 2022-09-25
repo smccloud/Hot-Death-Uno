@@ -1,12 +1,13 @@
 package com.runtsoft.hotdeath;
 
-import java.util.HashMap;
-
-import android.widget.BaseAdapter;
 import android.content.Context;
-import android.view.*;
-import android.widget.ImageView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.GridView;
+import android.widget.ImageView;
+
+import java.util.HashMap;
 
 public class CardImageAdapter extends BaseAdapter {
     private Context mContext;

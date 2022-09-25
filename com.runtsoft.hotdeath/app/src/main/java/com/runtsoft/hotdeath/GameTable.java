@@ -1,23 +1,28 @@
 package com.runtsoft.hotdeath;
 
 
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.os.Handler;
 import android.util.Log;
-
-import android.app.AlertDialog;
-
-import android.content.DialogInterface;
-
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Toast;
-import android.content.Context;
-import java.util.HashMap;
 
-import android.graphics.*;
-import android.content.res.Resources;
 import com.runtsoft.hotdeath.R;
+
+import java.util.HashMap;
 
 
 public class GameTable extends View 
@@ -1029,9 +1034,9 @@ public class GameTable extends View
 		if (numcards > m_maxCardsDisplay)
 		{
 			Point pt = m_ptCardBadge[seat - 1];
-			
-            m_drawMatrix.reset();
-    		m_drawMatrix.setScale(1, 1);
+
+			m_drawMatrix.reset();
+			m_drawMatrix.setScale(1, 1);
     		m_drawMatrix.setTranslate(pt.x, pt.y);
     		
             cv.drawBitmap(m_bmpCardBadge, m_drawMatrix, null);
@@ -1067,14 +1072,14 @@ public class GameTable extends View
 
 	    BitmapFactory.Options opt = new BitmapFactory.Options();
 	    //opt.inScaled = false;
-	    
-	    m_bmpCardBack = BitmapFactory.decodeResource(res, R.drawable.card_back, opt);
+
+		m_bmpCardBack = BitmapFactory.decodeResource(res, R.drawable.card_back, opt);
 
 		m_imageIDLookup.put (Card.ID_RED_0, R.drawable.card_red_0);
 		m_imageLookup.put (Card.ID_RED_0, BitmapFactory.decodeResource(res, R.drawable.card_red_0, opt));
 		m_cardHelpLookup.put (Card.ID_RED_0, R.string.cardhelp_0);
-        m_cardLookup.put (Card.ID_RED_0, new Card(-1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, 0));
-        
+		m_cardLookup.put (Card.ID_RED_0, new Card(-1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, 0));
+
 		m_imageIDLookup.put (Card.ID_RED_1, R.drawable.card_red_1);
 		m_imageLookup.put (Card.ID_RED_1, BitmapFactory.decodeResource(res, R.drawable.card_red_1, opt));
 		m_cardHelpLookup.put (Card.ID_RED_1, R.string.cardhelp_1);
@@ -1713,10 +1718,10 @@ public class GameTable extends View
         Player pv = p.getVictim();
         if (pv != null) 
         {
-            pt = m_ptEmoticon[pv.getSeat() - 1];
-    		
-            m_drawMatrix.reset();
-    		m_drawMatrix.setScale(1, 1);
+			pt = m_ptEmoticon[pv.getSeat() - 1];
+
+			m_drawMatrix.reset();
+			m_drawMatrix.setScale(1, 1);
     		m_drawMatrix.setTranslate(pt.x, pt.y);
     		
             cv.drawBitmap(m_bmpEmoticonVictim, m_drawMatrix, null);
@@ -1725,10 +1730,10 @@ public class GameTable extends View
         Player pa = p.getGeneratingPlayer();
         if (pa != null) 
         {
-            pt = m_ptEmoticon[pa.getSeat() - 1];
-    		
-            m_drawMatrix.reset();
-    		m_drawMatrix.setScale(1, 1);
+			pt = m_ptEmoticon[pa.getSeat() - 1];
+
+			m_drawMatrix.reset();
+			m_drawMatrix.setScale(1, 1);
     		m_drawMatrix.setTranslate(pt.x, pt.y);
     		
             cv.drawBitmap(m_bmpEmoticonAggressor, m_drawMatrix, null);

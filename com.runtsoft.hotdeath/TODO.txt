@@ -1,5 +1,9 @@
 FEATURES
 
+- UI:
+
+  - Make it follow Google's newer UI guidelines
+
 - artwork:
 
   - scan additional card backgrounds for more realism

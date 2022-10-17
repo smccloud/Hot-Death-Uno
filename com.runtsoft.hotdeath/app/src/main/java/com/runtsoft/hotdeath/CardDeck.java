@@ -1,10 +1,11 @@
 package com.runtsoft.hotdeath;
 
+import com.runtsoft.hotdeath.Card;
+import java.util.Random;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import java.util.Random;
 
 public class CardDeck {
 	

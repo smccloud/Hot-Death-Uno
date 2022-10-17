@@ -1,9 +1,8 @@
 package com.runtsoft.hotdeath;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.util.Random;
+//import android.util.Log;
+import org.json.*;
 
 
 public class ComputerPlayer extends Player 

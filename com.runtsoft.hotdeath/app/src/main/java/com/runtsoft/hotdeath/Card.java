@@ -1,11 +1,9 @@
 package com.runtsoft.hotdeath;
 
+import org.json.*;
+
 import android.content.Context;
-
 import com.runtsoft.hotdeath.R;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 
 public class Card {
 

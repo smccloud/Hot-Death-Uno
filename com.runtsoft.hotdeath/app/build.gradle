@@ -50,7 +50,7 @@ android {
         applicationId 'com.runtsoft.hotdeath'
 
         // Defines the minimum API level required to run the app.
-        minSdkVersion 27
+        minSdkVersion 29
 
         // Specifies the API level used to test the app.
         targetSdkVersion 33

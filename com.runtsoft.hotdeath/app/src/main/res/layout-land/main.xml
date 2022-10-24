@@ -25,15 +25,15 @@
 		    <ImageButton android:src="@drawable/sel_btn_continue" android:id="@+id/btn_continue" 
 		    	android:layout_width="fill_parent" android:layout_height="wrap_content"
 		    	android:scaleType="center" 
-		    	android:background="@null"></ImageButton>
+		    	android:background="@null" />
 		    <ImageButton android:src="@drawable/sel_btn_new_game" android:id="@+id/btn_new_game" 
 		    	android:layout_width="fill_parent" android:layout_height="wrap_content"
 		    	android:scaleType="center" 
-		    	android:background="@null"></ImageButton>
+		    	android:background="@null" />
 		    <ImageButton android:src="@drawable/sel_btn_settings" android:id="@+id/btn_settings" 
 		    	android:layout_width="fill_parent" android:layout_height="wrap_content"
 		    	android:scaleType="center" 
-		    	android:background="@null"></ImageButton>
+		    	android:background="@null" />
 	   	</LinearLayout>
 		<LinearLayout
 	    	android:id="@+id/linearLayout3"
@@ -45,15 +45,15 @@
 		    <ImageButton android:src="@drawable/sel_btn_help" android:id="@+id/btn_help"
 		    	android:layout_width="fill_parent" android:layout_height="wrap_content"
 		    	android:scaleType="center"
-		    	android:background="@null"></ImageButton>
+		    	android:background="@null" />
 		    <ImageButton android:src="@drawable/sel_btn_about" android:id="@+id/btn_about"
 		    	android:layout_width="fill_parent" android:layout_height="wrap_content"
 		    	android:scaleType="center"
-		    	android:background="@null"></ImageButton>
+		    	android:background="@null" />
 		    <ImageButton android:src="@drawable/sel_btn_exit" android:id="@+id/btn_exit"
 		    	android:layout_width="fill_parent" android:layout_height="wrap_content"
 		    	android:scaleType="center"
-		    	android:background="@null"></ImageButton>
+		    	android:background="@null" />
 	   	</LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -1029,9 +1029,9 @@ public class GameTable extends View
 		if (numcards > m_maxCardsDisplay)
 		{
 			Point pt = m_ptCardBadge[seat - 1];
-			
-            m_drawMatrix.reset();
-    		m_drawMatrix.setScale(1, 1);
+
+			m_drawMatrix.reset();
+			m_drawMatrix.setScale(1, 1);
     		m_drawMatrix.setTranslate(pt.x, pt.y);
     		
             cv.drawBitmap(m_bmpCardBadge, m_drawMatrix, null);
@@ -1067,8 +1067,8 @@ public class GameTable extends View
 
 	    BitmapFactory.Options opt = new BitmapFactory.Options();
 	    //opt.inScaled = false;
-	    
-	    m_bmpCardBack = BitmapFactory.decodeResource(res, R.drawable.card_back, opt);
+
+		m_bmpCardBack = BitmapFactory.decodeResource(res, R.drawable.card_back, opt);
 
 		m_imageIDLookup.put (Card.ID_RED_0, R.drawable.card_red_0);
 		m_imageLookup.put (Card.ID_RED_0, BitmapFactory.decodeResource(res, R.drawable.card_red_0, opt));
@@ -1714,9 +1714,9 @@ public class GameTable extends View
         if (pv != null) 
         {
             pt = m_ptEmoticon[pv.getSeat() - 1];
-    		
-            m_drawMatrix.reset();
-    		m_drawMatrix.setScale(1, 1);
+
+			m_drawMatrix.reset();
+			m_drawMatrix.setScale(1, 1);
     		m_drawMatrix.setTranslate(pt.x, pt.y);
     		
             cv.drawBitmap(m_bmpEmoticonVictim, m_drawMatrix, null);
@@ -1726,9 +1726,9 @@ public class GameTable extends View
         if (pa != null) 
         {
             pt = m_ptEmoticon[pa.getSeat() - 1];
-    		
-            m_drawMatrix.reset();
-    		m_drawMatrix.setScale(1, 1);
+
+			m_drawMatrix.reset();
+			m_drawMatrix.setScale(1, 1);
     		m_drawMatrix.setTranslate(pt.x, pt.y);
     		
             cv.drawBitmap(m_bmpEmoticonAggressor, m_drawMatrix, null);

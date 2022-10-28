@@ -84,7 +84,7 @@ public class GameActivity extends Activity
 	    	JSONObject o;
 	    	try
 	    	{
-		    	o = new JSONObject (s);	    	
+				o = new JSONObject (s);
 				m_game = new Game (o, this, m_go);
 	    	}
 	    	catch (JSONException e)
@@ -108,7 +108,7 @@ public class GameActivity extends Activity
 	    m_btnFastForward.setText(getString(R.string.lbl_fast_forward));
 	    m_btnFastForward.setId(View.generateViewId());
 	    m_btnFastForward.setVisibility(View.INVISIBLE);
-	    m_btnFastForward.setOnClickListener (new View.OnClickListener() {
+		m_btnFastForward.setOnClickListener (new View.OnClickListener() {
 			
 			@Override
 			public void onClick(View v) {
@@ -245,9 +245,9 @@ public class GameActivity extends Activity
     	m_game.shutdown ();
     	m_game = null;
     	m_gt = null;
-       	m_go = null;
-    	
-    	super.onDestroy ();
+		m_go = null;
+
+		super.onDestroy ();
     };
     
     public void showCardHelp ()

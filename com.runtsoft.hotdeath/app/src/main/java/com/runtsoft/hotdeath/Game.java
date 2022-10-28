@@ -186,7 +186,7 @@ public class Game extends Thread {
 		// on the second call, we'll really shut down; but also be careful
 		// in case we get called more than two times...
 		Log.d("HDU", "Game thread nulling out references and exiting...");
-    	if  (m_gt != null)
+		if  (m_gt != null)
     	{
     		m_gt.shutdown ();
     		m_go.shutdown ();

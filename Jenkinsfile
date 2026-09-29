@@ -169,10 +169,22 @@ node {
   stage('Archive') {
     archiveArtifacts artifacts: "${moduleDir}/app/build/outputs/apk/debug/*.apk",
                      allowEmptyArchive: true, fingerprint: true
-    def apks = file("${moduleDir}/app/build/outputs/apk/debug").listFiles()
-    if (apks == null || apks.findAll { it.name.endsWith('.apk') }.isEmpty()) {
+    // The APK check has to run in sh. file(...) hands back an
+    // UninstantiatedDescribableWithInterpolation inside the script-security
+    // sandbox, so .listFiles() there dies with MissingMethodException.
+    // `|| true` keeps set -e from tripping when the glob matches nothing.
+    def apks = sh(
+      script: """
+        set -euo pipefail
+        ls -1 '${moduleDir}/app/build/outputs/apk/debug/'*.apk 2>/dev/null || true
+      """,
+      returnStdout: true
+    ).trim()
+    if (apks.isEmpty()) {
       echo 'WARNING: no APK produced, yet the build reported success'
       currentBuild.result = 'UNSTABLE'
+    } else {
+      echo "APK(s) produced:\n${apks}"
     }
   }
 }

@@ -10,8 +10,11 @@ Java-to-Kotlin migration.
 | 3 | Convert leaf classes mechanically | tests stay green |
 | 4 | `Player` hierarchy → `Game` / `ComputerPlayer` | tests + review |
 | 5 | Android UI last (GameActivity, GameTable, Main, Prefs) | manual on-device |
+| 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
+| 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
+| 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
 
-## 6. Messaging
+## Messaging
 
 Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 
@@ -23,7 +26,7 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 | Mystery Draw on a non-number | `msg_penalty_null_wild_mystery` says "same as Wild" but never says the victim draws nothing. Say it: "South draws nothing - Mystery Draw on a non-number". | play Mystery Draw on a Wild |
 | Confirm a legal play | There is `msg_card_no_good` for a rejected card and nothing at all for an accepted one, so a player cannot see *why* a play was legal. Toast it — "North threw another green 5". Needs a card descriptor (colour + value) helper, and a decision on whether "another" is reserved for a second consecutive match. | play a matching card |
 
-## 7. Novice mode
+## Novice mode
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
@@ -32,7 +35,7 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 | Do not add more blocking sleeps | The tap wait is a `while` loop of `Thread.sleep(100)` on the game thread and `HumanPlayer` has four more. A pause that can wait forever makes that pattern a shutdown hazard — clear the flag in `onPause`/`onDestroy`. | background the app mid-pause |
 | Default off | Expose the setting in `preferences.xml` beside `game_speed`, defaulted off. | fresh install |
 
-## 8. Computer players
+## Computer players
 
 `ComputerPlayer` is rule-based: `m_skill` gates behaviour at levels 1 and 2, `m_aggression` shifts the colour-balance thresholds, and `chooseColor` / `chooseVictim` / `getMinCardsRemaining` do the rest. `Random` is used only to pick how many cards to deal.
 

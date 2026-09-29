@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
@@ -43,6 +45,11 @@ android {
 // JDK 17 present, and Gradle can only auto-provision it with the foojay
 // resolver configured in settings.gradle, which this project does not have.
 // Set the target, run on whatever JDK 17+ is available.
-kotlinOptions {
-    jvmTarget = '17'
+//
+// kotlinOptions {} is deprecated *with error* as of Kotlin 2.4 and its
+// top-level extension is gone, so use the kotlin {} compilerOptions block.
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
 }

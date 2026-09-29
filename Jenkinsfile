@@ -13,6 +13,15 @@
 // UninstantiatedDescribableWithInterpolation, so calling .exists() on it throws.
 // Keep Groovy to stage ordering; put real logic in `sh` with returnStdout.
 
+// Keep only the 10 most recent builds. Set outside `node` so it applies even if
+// no executor is free. Written as raw $class rather than the usual
+// buildDiscarder(logRotator(...)) because that symbol is registered by
+// pipeline-model-definition, which this instance does not have. Both classes
+// below are Jenkins core, and the `properties` step comes from the Pipeline: Job
+// plugin -- mandatory for a "script from SCM" job to exist at all.
+properties([[$class: 'BuildDiscarderProperty',
+              strategy: [$class: 'LogRotator', numToKeepStr: '10']]])
+
 node {
   def moduleDir = 'com.smccloud.hotdeath'
   def gradleVersion = '8.13'

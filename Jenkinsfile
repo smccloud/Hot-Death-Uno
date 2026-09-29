@@ -8,7 +8,10 @@
 def MODULE = 'com.runtsoft.hotdeath'
 def GRADLE_VERSION = '8.13'
 def ANDROID_API = '36'
-def ANDROID_BUILD_TOOLS = '36.0.0'
+// 35.0.0 is AGP 8.11's *default* build-tools revision, and this project never
+// sets buildToolsVersion, so AGP resolves 35.0.0 regardless of what the newest
+// revision is. Installing 36.0.0 alone makes AGP fail or silently auto-download.
+def ANDROID_BUILD_TOOLS = '35.0.0'
 def CACHE = "${env.JENKINS_HOME ?: '/var/jenkins_home'}/.toolcache/hotdeath"
 
 // The repo ships no gradle-wrapper.jar, so ./gradlew exits 0 without building

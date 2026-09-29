@@ -131,37 +131,32 @@ public class Main extends Activity implements OnClickListener
     }
     
     public void onClick(View v) {
-    	Intent intent;
-    	
-        switch (v.getId()) {
-        
-        case R.id.btn_new_game:
-            intent = new Intent(this, GameActivity.class);
+    	// An if/else chain rather than a switch: AGP 8 generates non-final R
+    	// fields (android.nonFinalResIds defaults to true), so R.id.* is not a
+    	// compile-time constant and cannot be used as a case label.
+        int id = v.getId();
+
+        if (id == R.id.btn_new_game) {
+            Intent intent = new Intent(this, GameActivity.class);
             intent.putExtra(GameActivity.STARTUP_MODE, GameActivity.STARTUP_MODE_NEW);
             startActivity(intent);
-            break;
 
-        case R.id.btn_continue:
-			intent = new Intent(this, GameActivity.class);
+        } else if (id == R.id.btn_continue) {
+			Intent intent = new Intent(this, GameActivity.class);
 			intent.putExtra(GameActivity.STARTUP_MODE, GameActivity.STARTUP_MODE_CONTINUE);
 			startActivity(intent);
-			break;
-			
-        case R.id.btn_settings:
+
+        } else if (id == R.id.btn_settings) {
         	startActivity (new Intent (this, Prefs.class));
-        	break;
-           
-        case R.id.btn_help:
+
+        } else if (id == R.id.btn_help) {
         	this.showDialog(DIALOG_HELP);
-        	break;
 
-        case R.id.btn_about:
+        } else if (id == R.id.btn_about) {
         	this.showDialog(DIALOG_ABOUT);
-        	break;
 
-        case R.id.btn_exit:
+        } else if (id == R.id.btn_exit) {
 			finish();
-			break;
         }
      }
 }

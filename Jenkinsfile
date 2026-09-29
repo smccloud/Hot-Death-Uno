@@ -6,16 +6,12 @@
 // workflow-support, script-security.
 //
 // DESIGN NOTE -- why almost nothing is done in Groovy here:
-// Every earlier failure in this file came from Groovy code touching Jenkins
-// objects inside the script-security sandbox. Top-level `def` constants are
-// locals of run(), not fields, so helper methods cannot read them. And
-// env.SOME_VAR does not necessarily return a String -- when unset it returns an
-// UninstantiatedDescribableWithInterpolation, so calling .exists() on it throws
-// MissingMethodException.
-//
-// So: keep Groovy to stage/stage ordering, and put the actual logic in `sh`
-// with returnStdout. Shell has none of those traps. If you add logic here, add
-// it in a heredoc, not in Groovy.
+// Earlier failures all came from Groovy code touching Jenkins objects inside the
+// script-security sandbox. Top-level `def` constants are locals of run(), not
+// fields, so helper methods cannot read them. And env.SOME_VAR does not
+// necessarily return a String -- when unset it returns an
+// UninstantiatedDescribableWithInterpolation, so calling .exists() on it throws.
+// Keep Groovy to stage ordering; put real logic in `sh` with returnStdout.
 
 node {
   def moduleDir = 'com.runtsoft.hotdeath'
@@ -36,34 +32,49 @@ node {
     sh 'java -version 2>&1 | head -n 3'
   }
 
-  // Resolves to a usable SDK, downloading one on first run. Installation chatter
-  // goes to stderr so that returnStdout captures only the path.
+  // An SDK already exists on this controller at $ANDROID_HOME
+  // (/var/lib/jenkins/android-sdk) with cmdline-tools but without
+  // platforms;android-36. So: adopt any existing SDK, then ensure the required
+  // packages are present regardless of how old it is. sdkmanager is idempotent,
+  // so running it unconditionally is cheap.
   stage('Android SDK') {
     sdkHome = sh(
       script: """
         set -euo pipefail
         CACHE="\${JENKINS_HOME:-/var/lib/jenkins}/.toolcache/hotdeath"
-        SDK="\$CACHE/android-sdk"
+        SDK=""
+        for c in "\${ANDROID_HOME:-}" "\${ANDROID_SDK_ROOT:-}" "\$CACHE/android-sdk"; do
+          if [ -n "\$c" ] && [ -d "\$c" ]; then SDK="\$c"; break; fi
+        done
+        if [ -z "\$SDK" ]; then SDK="\$CACHE/android-sdk"; fi
+        mkdir -p "\$SDK"
+        echo "using SDK: \$SDK" >&2
 
-        for c in "\${ANDROID_HOME:-}" "\${ANDROID_SDK_ROOT:-}" "\$SDK"; do
-          if [ -n "\$c" ] && [ -d "\$c/cmdline-tools" ]; then SDK="\$c"; break; fi
+        SDKMANAGER=""
+        for cand in "\$SDK/cmdline-tools/latest/bin/sdkmanager" \\
+                    "\$SDK"/cmdline-tools/*/bin/sdkmanager \\
+                    "\$SDK/tools/bin/sdkmanager"; do
+          if [ -x "\$cand" ]; then SDKMANAGER="\$cand"; break; fi
         done
 
-        if [ ! -d "\$SDK/cmdline-tools" ]; then
-          echo "provisioning SDK at \$SDK" >&2
-          mkdir -p "\$SDK/cmdline-tools"
+        if [ -z "\$SDKMANAGER" ]; then
+          echo "installing cmdline-tools" >&2
           curl -fsSL -o /tmp/cmdtools.zip \\
             'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip'
           unzip -q -o /tmp/cmdtools.zip -d /tmp/cmdtools
           rm -rf "\$SDK/cmdline-tools/latest"
+          mkdir -p "\$SDK/cmdline-tools"
           mv /tmp/cmdtools/cmdline-tools "\$SDK/cmdline-tools/latest"
-          yes | "\$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
-          "\$SDK/cmdline-tools/latest/bin/sdkmanager" \\
-            'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}'
+          SDKMANAGER="\$SDK/cmdline-tools/latest/bin/sdkmanager"
         fi
+        echo "using sdkmanager: \$SDKMANAGER" >&2
+
+        yes | "\$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+        "\$SDKMANAGER" \\
+          'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}'
 
         test -d "\$SDK/platforms/android-${api}" || { echo "MISSING platform android-${api}" >&2; exit 1; }
-        test -d "\$SDK/build-tools/${buildTools}"  || { echo "MISSING build-tools ${buildTools}" >&2; exit 1; }
+        test -d "\$SDK/build-tools/${buildTools}" || { echo "MISSING build-tools ${buildTools}" >&2; exit 1; }
         echo "\$SDK"
       """,
       returnStdout: true

@@ -101,7 +101,7 @@ node {
             'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip.sha256'
         # Gradle publishes a bare 64-char hash with no filename, but
         # `sha256sum -c` requires "<hash>  <file>". So compare manually.
-        # awk '{print $1}' tolerates either layout.
+        # Taking awk's first field tolerates either layout.
         EXPECTED=\$(awk '{print \$1}' "\$G.zip.sha256" | tr -d '\\r\\n')
         ACTUAL=\$(sha256sum "\$G.zip" | cut -d' ' -f1)
         if [ "\$EXPECTED" != "\$ACTUAL" ]; then

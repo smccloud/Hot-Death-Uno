@@ -6,6 +6,7 @@ import org.json.*;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.app.Dialog;
+import android.graphics.Insets;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 // import android.view.Menu;
@@ -149,6 +150,8 @@ public class GameActivity extends Activity
 
 		setContentView (l);
 
+		applyEdgeToEdgeInsets();
+
 
 		m_btnMenuDraw = findViewById(R.id.btn_menu_draw);
 		m_btnMenuPass = findViewById(R.id.btn_menu_pass);
@@ -185,6 +188,32 @@ public class GameActivity extends Activity
 	    
 	    m_gt.startGameWhenReady();
     }
+
+
+	/**
+	 * Targeting API 35+ means edge-to-edge is enforced and can no longer be opted
+	 * out of, so the window no longer reserves room for the status or navigation
+	 * bars. Pad the content frame by the system bar and display cutout insets
+	 * instead: the RelativeLayout shrinks, GameTable.onSizeChanged() recomputes all
+	 * of its geometry from the new size, and the options menu moves above the
+	 * navigation bar. Uses the platform WindowInsets API (available from API 30)
+	 * so the project stays dependency-free.
+	 */
+	private void applyEdgeToEdgeInsets ()
+	{
+		View content = findViewById (android.R.id.content);
+		content.setOnApplyWindowInsetsListener (new View.OnApplyWindowInsetsListener () {
+
+			@Override
+			public WindowInsets onApplyWindowInsets (View v, WindowInsets insets)
+			{
+				Insets bars = insets.getInsets (WindowInsets.Type.systemBars() |
+				                                WindowInsets.Type.displayCutout());
+				v.setPadding (bars.left, bars.top, bars.right, bars.bottom);
+				return WindowInsets.CONSUMED;
+			}
+		});
+	}
 
 
 	@Override

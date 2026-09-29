@@ -3,6 +3,7 @@ package com.runtsoft.hotdeath;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
+import android.graphics.Insets;
 import android.os.Bundle;
 import android.preference.EditTextPreference;
 import android.preference.ListPreference;
@@ -11,6 +12,8 @@ import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
+import android.view.View;
+import android.view.WindowInsets;
 
 public class Prefs extends PreferenceActivity implements OnSharedPreferenceChangeListener
 {
@@ -57,6 +60,25 @@ public class Prefs extends PreferenceActivity implements OnSharedPreferenceChang
         {
         	initSummary (getPreferenceScreen().getPreference(i));
         }
+
+        applyEdgeToEdgeInsets();
+    }
+
+    /** See GameActivity.applyEdgeToEdgeInsets(): edge-to-edge is mandatory at targetSdk 35+. */
+    private void applyEdgeToEdgeInsets()
+    {
+        View content = findViewById(android.R.id.content);
+        content.setOnApplyWindowInsetsListener (new View.OnApplyWindowInsetsListener () {
+
+            @Override
+            public WindowInsets onApplyWindowInsets (View v, WindowInsets insets)
+            {
+                Insets bars = insets.getInsets (WindowInsets.Type.systemBars() |
+				                                WindowInsets.Type.displayCutout());
+                v.setPadding (bars.left, bars.top, bars.right, bars.bottom);
+                return WindowInsets.CONSUMED;
+            }
+        });
     }
 
     @Override 

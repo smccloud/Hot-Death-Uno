@@ -16,9 +16,9 @@ networked play.
 |---|---|
 | Package | `com.runtsoft.hotdeath` |
 | Current version | 1.0.12 (`versionCode` 12) |
-| Platform | Android, `minSdk` 29 (Android 10) / `targetSdk` 33 |
-| Language | Java (no third-party dependencies) |
-| Build | Gradle + Android Gradle Plugin 7.3.0 |
+| Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
+| Language | Java 17 (no third-party dependencies) |
+| Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
 | License | MIT — see [License](#license) |
 
 ---
@@ -240,9 +240,9 @@ Matching is a plain `String.contains()` in `GameOptions`.
 
 ### Requirements
 
-- JDK 17 (required by Android Gradle Plugin 7.3.0)
-- Android SDK Platform 33
-- Gradle 7.4+ (or Android Studio Hedgehog / Iguana)
+- JDK 17 or newer (required by Android Gradle Plugin 8.11.1)
+- Android SDK Platform 36
+- Gradle 8.13+ (or Android Studio Meerkat and newer)
 
 ### With Android Studio
 
@@ -261,27 +261,14 @@ Outputs land in `com.runtsoft.hotdeath/app/build/outputs/apk/`.
 
 ### Wrapper caveat
 
-`gradlew` and `gradlew.bat` are committed, but **`gradle/wrapper/gradle-wrapper.properties`
-and the wrapper JAR are not**. `./gradlew` will therefore fail until you either run
-`gradle wrapper` once to generate them, or drop the `gradle/` directory in. There is
-also no `local.properties` — set `sdk.dir` to your Android SDK path, or rely on
-`ANDROID_HOME`.
+`gradlew` and `gradlew.bat` are committed, and
+`gradle/wrapper/gradle-wrapper.properties` pins Gradle 8.13 — but
+**`gradle-wrapper.jar` is still not in the repository**. `./gradlew` will fail until
+you run `gradle wrapper` once to generate it, or let Android Studio regenerate it on
+sync. There is also no `local.properties` — set `sdk.dir` to your Android SDK path, or
+rely on `ANDROID_HOME`.
 
-### Two build issues to know about
-
-1. **`app/build.gradle` references `proguard-rules.pro`, which does not exist.** Since
-   `release` sets `minifyEnabled true`, `assembleRelease` will fail. The legacy rules
-   live at the project root in `proguard.cfg`. Either create an empty
-   `app/proguard-rules.pro` or change the reference:
-   ```gradle
-   proguardFiles getDefaultProguardFile('proguard-android.txt'), '../proguard.cfg'
-   ```
-2. **`jcenter()` is declared in `build.gradle` and has been shut down.** It is
-   harmless today because the project has no third-party dependencies, but you can
-   safely drop it and keep `google()` alone.
-
-There are also no unit or instrumented tests in this repository, and no CI
-configuration.
+There are no unit or instrumented tests in this repository, and no CI configuration.
 
 ---
 
@@ -292,18 +279,20 @@ configuration.
 ├── LICENSE                       MIT
 ├── README.md                     this file
 └── com.runtsoft.hotdeath/       the Gradle root
-    ├── build.gradle              root buildscript; AGP 7.3.0
+    ├── build.gradle              root buildscript; AGP 8.11.1
     ├── settings.gradle           include ':app'
-    ├── gradle.properties         1.5 GB daemon heap
-    ├── proguard.cfg              legacy ProGuard rules
+    ├── gradle.properties         2 GB daemon heap
+    ├── gradle/wrapper/           distributionUrl pinned to Gradle 8.13 (no JAR committed)
+    ├── proguard.cfg              legacy ProGuard rules, superseded by app/proguard-rules.pro
     ├── default.properties        vestigial Ant-era stub
-    ├── gradlew, gradlew.bat      wrapper scripts (no gradle/ dir)
+    ├── gradlew, gradlew.bat      wrapper scripts
     ├── CHANGELOG.txt             release notes, v0.9 through v1.0.5
     ├── TODO.txt                  open issues and completed work
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 33, minSdk 29, versionCode 12
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 12
+        ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
             ├── java/com/runtsoft/hotdeath/    16 classes, ~7,600 lines
@@ -438,14 +427,50 @@ preference.
 
 ## Development notes
 
+### Android 16 (API 36) retarget
+
+`minSdk` was raised from 29 to 34 and `targetSdk`/`compileSdk` from 33 to 36. Because
+AGP 7.3.0 tops out at `compileSdk` 33, the toolchain moved to **AGP 8.11.1 / Gradle
+8.13 / Java 17** at the same time. That upgrade is not cosmetic — it is what makes API
+36 possible at all.
+
+Three behavioral changes came with the retarget:
+
+- **Edge-to-edge is now mandatory.** Since `targetSdk` 35 the framework no longer lets
+  an app reserve room for the system bars, and there is no opt-out. Each activity now
+  installs a `WindowInsets` listener on `android.R.id.content` and pads it by the
+  system-bar and display-cutout insets (`applyEdgeToEdgeInsets()` in `Main`,
+  `GameActivity`, and `Prefs`). Because `GameTable` recomputes its entire layout from
+  its view size in `onSizeChanged`, padding the content frame is enough — the board,
+  the hands, and the options menu all re-flow. This uses the platform `WindowInsets`
+  API, available from API 30, so the project still has **zero third-party
+  dependencies**; the obvious alternative, `androidx.core`'s `WindowInsetsCompat`,
+  would have forced AndroidX on the project.
+- **Predictive back needed no migration.** Nothing in the app overrides
+  `onBackPressed()`, so the default behavior is already correct under the API 36
+  back-dispatch model.
+- **Rotation no longer recreates the activity.** `configChanges` for
+  `orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density` is now
+  declared on all three activities. This makes the pre-existing
+  `onConfigurationChanged()` overrides actually fire — they were dead before, because
+  without the manifest attribute Android recreates the activity instead. It also avoids
+  losing an in-progress game on rotation, which happened because the game is persisted
+  to preferences and the `STARTUP_MODE` intent extra does not survive recreation.
+
+> **Cosmetic side effect:** `Prefs` was given `android:theme="@android:style/Theme.NoTitleBar"`
+> to match the other two activities, which means the settings screen no longer draws
+> its own title bar. Content padding alone cannot inset a framework title bar, and the
+> old title ("Hot Death settings") is the activity's own label. Revert that one
+> attribute if you would rather keep the title bar and accept the overlap.
+
 ### Known bugs
 
 - **`standardrules` cheat code is non-functional.** The `standardRules && !oneDeck`
   branch in `CardDeck.reset()` is missing, and the `standardRules` branch that does
   exist enumerates 324 cards into an array sized for 108. It will throw
   `ArrayIndexOutOfBoundsException` or build an empty deck.
-- **`proguard-rules.pro` is referenced but missing** — see [Building](#building).
-- **The Gradle wrapper is incomplete** — see [Building](#building).
+- **`gradle-wrapper.jar` is still not committed** — `gradlew` will not run until you
+  generate it. See [Building](#building).
 - **Snapshot corruption is swallowed.** Both the `Game(JSONObject, ...)` constructor and
   `GameActivity` wrap deserialization in `catch (JSONException e)` with a `FIXME` and
   no recovery, so a corrupt `gamestate` silently starts a fresh game.

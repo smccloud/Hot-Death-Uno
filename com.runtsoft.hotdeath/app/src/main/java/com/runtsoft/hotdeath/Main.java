@@ -5,10 +5,12 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Insets;
 import android.preference.PreferenceManager;
 import android.os.Bundle;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.WindowInsets;
 import android.widget.TextView;
 import android.text.method.ScrollingMovementMethod;
 
@@ -82,7 +84,9 @@ public class Main extends Activity implements OnClickListener
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
-        
+
+        applyEdgeToEdgeInsets();
+
         findViewById(R.id.btn_continue).setOnClickListener(this);
         findViewById(R.id.btn_new_game).setOnClickListener(this);
         findViewById(R.id.btn_settings).setOnClickListener(this);
@@ -91,6 +95,20 @@ public class Main extends Activity implements OnClickListener
         findViewById(R.id.btn_exit).setOnClickListener(this);        
     }
     
+    /** See GameActivity.applyEdgeToEdgeInsets(): edge-to-edge is mandatory at targetSdk 35+. */
+    private void applyEdgeToEdgeInsets() {
+        View content = findViewById(android.R.id.content);
+        content.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars() |
+                                               WindowInsets.Type.displayCutout());
+                v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                return WindowInsets.CONSUMED;
+            }
+        });
+    }
+
     @Override
     public void onResume ()
     {

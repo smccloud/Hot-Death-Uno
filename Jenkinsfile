@@ -71,8 +71,11 @@ node {
         echo "sdk_root: \$SDK" >&2
 
         yes | "\$SDKMANAGER" --sdk_root="\$SDK" --licenses > /dev/null 2>&1 || true
+        # sdkmanager draws a progress bar on STDOUT. With returnStdout:true that
+        # would be captured into sdkHome alongside the path, handing Gradle a
+        # multi-line ANDROID_HOME. Send it to stderr; only the path stays on stdout.
         "\$SDKMANAGER" --sdk_root="\$SDK" \\
-          'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}'
+          'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}' >&2
 
         test -d "\$SDK/platforms/android-${api}" || { echo "MISSING platform android-${api}" >&2; exit 1; }
         test -d "\$SDK/build-tools/${buildTools}" || { echo "MISSING build-tools ${buildTools}" >&2; exit 1; }
@@ -96,8 +99,19 @@ node {
             'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip'
           curl -fsSL -o "\$G.zip.sha256" \\
             'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip.sha256'
-          ( cd "\$CACHE" && sha256sum -c "\$G.zip.sha256" )
-          unzip -q -o "\$G.zip"
+        # Gradle publishes a bare 64-char hash with no filename, but
+        # `sha256sum -c` requires "<hash>  <file>". So compare manually.
+        # awk '{print $1}' tolerates either layout.
+        EXPECTED=\$(awk '{print \$1}' "\$G.zip.sha256" | tr -d '\\r\\n')
+        ACTUAL=\$(sha256sum "\$G.zip" | cut -d' ' -f1)
+        if [ "\$EXPECTED" != "\$ACTUAL" ]; then
+          echo "CHECKSUM MISMATCH for \$G.zip" >&2
+          echo "  expected \$EXPECTED" >&2
+          echo "  actual   \$ACTUAL" >&2
+          exit 1
+        fi
+        echo "checksum ok (\$ACTUAL)" >&2
+        unzip -q -o "\$G.zip"
         fi
         "\$G/bin/gradle" --version >&2
         echo "\$G/bin/gradle"

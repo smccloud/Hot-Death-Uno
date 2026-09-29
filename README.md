@@ -14,7 +14,7 @@ networked play.
 
 | | |
 |---|---|
-| Package | `com.runtsoft.hotdeath` |
+| Package | `com.smccloud.hotdeath` |
 | Current version | 1.0.12 (`versionCode` 12) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 (no third-party dependencies) |
@@ -246,18 +246,18 @@ Matching is a plain `String.contains()` in `GameOptions`.
 
 ### With Android Studio
 
-Open the `com.runtsoft.hotdeath` directory as a project. The Gradle sync pulls the
+Open the `com.smccloud.hotdeath` directory as a project. The Gradle sync pulls the
 Android Gradle Plugin and builds from there.
 
 ### From the command line
 
 ```bash
-cd com.runtsoft.hotdeath
+cd com.smccloud.hotdeath
 gradle assembleDebug
 gradle assembleRelease
 ```
 
-Outputs land in `com.runtsoft.hotdeath/app/build/outputs/apk/`.
+Outputs land in `com.smccloud.hotdeath/app/build/outputs/apk/`.
 
 ### Wrapper caveat
 
@@ -278,7 +278,7 @@ There are no unit or instrumented tests in this repository, and no CI configurat
 .
 ├── LICENSE                       MIT
 ├── README.md                     this file
-└── com.runtsoft.hotdeath/       the Gradle root
+└── com.smccloud.hotdeath/       the Gradle root
     ├── build.gradle              root buildscript; AGP 8.11.1
     ├── settings.gradle           include ':app'
     ├── gradle.properties         2 GB daemon heap
@@ -295,7 +295,7 @@ There are no unit or instrumented tests in this repository, and no CI configurat
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/runtsoft/hotdeath/    16 classes, ~7,600 lines
+            ├── java/com/smccloud/hotdeath/    16 classes, ~7,600 lines
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml
@@ -546,8 +546,8 @@ Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released
 May 2011; the current source tree is version 1.0.12, migrated to a modern Gradle /
 AGP 7.3.0 toolchain.
 
-See [`CHANGELOG.txt`](com.runtsoft.hotdeath/CHANGELOG.txt) for the full release history
-and [`TODO.txt`](com.runtsoft.hotdeath/TODO.txt) for the original author's roadmap.
+See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
+and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.
 
 Upstream project history lives at <http://www.smorgasbork.com/hotdeath/>, and the
 issue tracker referenced in the changelog at

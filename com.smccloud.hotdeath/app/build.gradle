@@ -3,13 +3,13 @@ apply plugin: 'org.jetbrains.kotlin.android'
 
 android {
 
-    namespace 'com.runtsoft.hotdeath'
+    namespace 'com.smccloud.hotdeath'
 
     compileSdk 36
 
     defaultConfig {
 
-        applicationId 'com.runtsoft.hotdeath'
+        applicationId 'com.smccloud.hotdeath'
 
         minSdk 34
 

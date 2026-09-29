@@ -1,4 +1,4 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
 
 import android.os.Handler;
@@ -17,7 +17,7 @@ import java.util.HashMap;
 
 import android.graphics.*;
 import android.content.res.Resources;
-import com.runtsoft.hotdeath.R;
+import com.smccloud.hotdeath.R;
 
 
 public class GameTable extends View 

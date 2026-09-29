@@ -1,4 +1,4 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
 
 import android.app.Activity;
@@ -25,7 +25,7 @@ import android.widget.Button;
 
 public class GameActivity extends Activity 
 {
-	public static final String STARTUP_MODE = "com.runtsoft.hotdeath.startup_mode";
+	public static final String STARTUP_MODE = "com.smccloud.hotdeath.startup_mode";
 	
 	public static final int STARTUP_MODE_NEW = 1;
 	public static final int STARTUP_MODE_CONTINUE = 2;

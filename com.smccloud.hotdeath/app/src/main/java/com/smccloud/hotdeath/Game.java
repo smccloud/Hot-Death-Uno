@@ -1,9 +1,9 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
 import java.util.Random;
 import android.util.Log;
 
-import com.runtsoft.hotdeath.R;
+import com.smccloud.hotdeath.R;
 import org.json.*;
 
 public class Game extends Thread {

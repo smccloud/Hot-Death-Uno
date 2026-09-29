@@ -1,4 +1,4 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
 import android.content.Context;
 import android.content.SharedPreferences;

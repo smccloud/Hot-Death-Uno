@@ -14,7 +14,7 @@
 // Keep Groovy to stage ordering; put real logic in `sh` with returnStdout.
 
 node {
-  def moduleDir = 'com.runtsoft.hotdeath'
+  def moduleDir = 'com.smccloud.hotdeath'
   def gradleVersion = '8.13'
   def api = '36'
   // AGP 8.11's *default* build-tools revision. This project never sets

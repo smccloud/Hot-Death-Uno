@@ -1,4 +1,4 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
 
 import android.app.Activity;
@@ -15,7 +15,7 @@ import android.widget.TextView;
 import android.text.method.ScrollingMovementMethod;
 
 
-import com.runtsoft.hotdeath.R;
+import com.smccloud.hotdeath.R;
 
 public class Main extends Activity implements OnClickListener 
 {

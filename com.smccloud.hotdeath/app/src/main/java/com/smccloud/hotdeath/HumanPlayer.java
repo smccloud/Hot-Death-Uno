@@ -1,9 +1,9 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import com.runtsoft.hotdeath.R;
+import com.smccloud.hotdeath.R;
 
 public class HumanPlayer extends Player 
 {

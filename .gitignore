@@ -1,5 +1,5 @@
 # Build output
-# Note: unanchored, because the Gradle module sits at com.runtsoft.hotdeath/app --
+# Note: unanchored, because the Gradle module sits at com.smccloud.hotdeath/app --
 # an "app/release/" pattern would only match at the repo root.
 build/
 release/

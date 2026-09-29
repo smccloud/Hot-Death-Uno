@@ -1,6 +1,6 @@
-package com.runtsoft.hotdeath;
+package com.smccloud.hotdeath;
 
-import com.runtsoft.hotdeath.Card;
+import com.smccloud.hotdeath.Card;
 import java.util.Random;
 
 import org.json.JSONArray;

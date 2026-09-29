@@ -35,4 +35,4 @@
 # key rather than reflection, but the classes are reached from JNI-free code
 # only through their declared types -- keep the model intact for readability of
 # stack traces in release builds.
--keep class com.runtsoft.hotdeath.** { *; }
+-keep class com.smccloud.hotdeath.** { *; }

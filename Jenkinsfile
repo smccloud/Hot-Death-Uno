@@ -173,11 +173,13 @@ node {
   //
   // Sequential, not parallel: the controller has 8 GB of RAM, and emulators
   // this size would thrash if run together.
+  //
+  // POSIX sh only -- the sh step runs /bin/sh, which is dash here, so no [[ ]].
   stage('Emulator') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
         sh """
-          set -euo pipefail
+          set -eu
           CACHE="\${JENKINS_HOME:-/var/lib/jenkins}/.toolcache/hotdeath"
           SDK="\$ANDROID_HOME"
           AVDHOME="\$CACHE/avd"
@@ -190,16 +192,16 @@ node {
 
           # KVM lives in the kvm group, which the jenkins user is a member of.
           # Without it the x86_64 image falls back to software emulation and
-          # never boots in reasonable time, so fail loudly instead. Matching in
-          # bash rather than piping to grep: under `set -o pipefail` a `grep -q`
-          # that exits on first match can SIGPIPE its producer and fail the
-          # whole pipeline.
+          # never boots in reasonable time, so fail loudly instead.
           ACCEL="\$("\$EMU" -accel-check 2>&1 || true)"
-          if [[ "\$ACCEL" != *"installed and usable"* ]]; then
-            echo "KVM is unusable for the jenkins user" >&2
-            echo "\$ACCEL" >&2
-            exit 1
-          fi
+          case "\$ACCEL" in
+            *"installed and usable"*) ;;
+            *)
+              echo "KVM is unusable for the jenkins user" >&2
+              echo "\$ACCEL" >&2
+              exit 1
+              ;;
+          esac
 
           # A deterministic device set. connectedAndroidTest runs against
           # everything attached, so a stray emulator from an interactive
@@ -214,21 +216,30 @@ node {
           # re-fetch the remote repository four times over.
           AVAILABLE="\$("\$SDKMANAGER" --sdk_root="\$SDK" --list 2>/dev/null || true)"
 
+          # API level : system-image tag. Android 17 is published as 37.0/37.1/
+          # 37.2 rather than a bare 37, so the tag is spelled out per level
+          # instead of being assumed from the API number.
           ran=''
           skipped=''
-          for api in 34 35 36 37; do
-            IMAGE="system-images;android-\$api;google_apis;x86_64"
+          failed=''
+          for entry in 34:34 35:35 36:36 37:37.0; do
+            api="\${entry%%:*}"
+            tag="\${entry##*:}"
+            IMAGE="system-images;android-\$tag;google_apis;x86_64"
             AVD="api\$api"
 
-            # api37 is listed for when Google publishes an image for it; until
-            # then it is skipped loudly rather than silently dropped.
-            if [[ "\$AVAILABLE" != *"\$IMAGE"* ]]; then
-              echo "SKIPPED \$AVD: \$IMAGE is not published yet" >&2
-              skipped="\$skipped \$AVD"
-              continue
-            fi
+            # Skip rather than fail when Google has not published this image
+            # yet, so the matrix grows on its own as images appear.
+            case "\$AVAILABLE" in
+              *"\$IMAGE"*) ;;
+              *)
+                echo "SKIPPED \$AVD: \$IMAGE is not published yet" >&2
+                skipped="\$skipped \$AVD"
+                continue
+                ;;
+            esac
 
-            if [ ! -d "\$SDK/system-images/android-\$api/google_apis/x86_64" ]; then
+            if [ ! -d "\$SDK/system-images/android-\$tag/google_apis/x86_64" ]; then
               echo "installing \$IMAGE" >&2
               "\$SDKMANAGER" --sdk_root="\$SDK" "\$IMAGE" >&2
             fi
@@ -263,9 +274,16 @@ node {
             fi
             echo "\$AVD booted" >&2
 
-            "${gradleHome}" --no-daemon --stacktrace connectedDebugAndroidTest
-
-            ran="\$ran \$AVD"
+            # Run every API even if one fails, so a single build reports the
+            # whole matrix instead of stopping at the first bad device. The
+            # exit code is re-raised at the end.
+            if "${gradleHome}" --no-daemon --stacktrace connectedDebugAndroidTest; then
+              ran="\$ran \$AVD"
+            else
+              echo "TESTS FAILED on \$AVD" >&2
+              ran="\$ran \$AVD"
+              failed="\$failed \$AVD"
+            fi
 
             # Stop it before the next API, or the next emulator cannot claim
             # the console port.
@@ -279,9 +297,13 @@ node {
             done
           done
 
-          echo "emulator matrix -- tested:[\$ran] skipped:[\$skipped]"
+          echo "emulator matrix -- tested:[\$ran] skipped:[\$skipped] failed:[\$failed]"
           if [ -z "\$ran" ]; then
             echo "no AVD in the matrix could be started" >&2
+            exit 1
+          fi
+          if [ -n "\$failed" ]; then
+            echo "instrumented tests failed on: \$failed" >&2
             exit 1
           fi
         """

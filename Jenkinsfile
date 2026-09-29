@@ -160,8 +160,139 @@ node {
     }
   }
 
+  // Instrumented tests need a real Android runtime, which the JVM unit tests
+  // cannot stand in for: org.json is a stub there, and the launch smoke test
+  // needs a real Activity. So boot a headless AVD per API level and let Gradle
+  // drive it.
+  //
+  // The aosp_atd image is Google's headless test image -- no window, no GPU,
+  // no audio -- and with KVM it reaches boot_completed in about 20 seconds.
+  // Images and AVDs live in the toolcache, so this is a no-op after the first
+  // run.
+  //
+  // Sequential, not parallel: the controller has 8 GB of RAM, and four
+  // emulators at 1.5 GB each would thrash.
+  stage('Emulator') {
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh """
+          set -euo pipefail
+          CACHE="\${JENKINS_HOME:-/var/lib/jenkins}/.toolcache/hotdeath"
+          SDK="\$ANDROID_HOME"
+          AVDHOME="\$CACHE/avd"
+          ADB="\$SDK/platform-tools/adb"
+          EMU="\$SDK/emulator/emulator"
+          SDKMANAGER="\$SDK/cmdline-tools/latest/bin/sdkmanager"
+          AVDMANAGER="\$SDK/cmdline-tools/latest/bin/avdmanager"
+          export ANDROID_AVD_HOME="\$AVDHOME"
+          mkdir -p "\$AVDHOME"
+
+          # KVM lives in the kvm group, which the jenkins user is a member of.
+          # Without it the x86_64 image falls back to software emulation and
+          # never boots in reasonable time, so fail loudly instead. Matching in
+          # bash rather than piping to grep: under `set -o pipefail` a `grep -q`
+          # that exits on first match can SIGPIPE its producer and fail the
+          # whole pipeline.
+          ACCEL="\$("\$EMU" -accel-check 2>&1 || true)"
+          if [[ "\$ACCEL" != *"installed and usable"* ]]; then
+            echo "KVM is unusable for the jenkins user" >&2
+            echo "\$ACCEL" >&2
+            exit 1
+          fi
+
+          # A deterministic device set. connectedAndroidTest runs against
+          # everything attached, so a stray emulator from an interactive
+          # session would quietly join the matrix and skew the results.
+          for serial in \$("\$ADB" devices 2>/dev/null | awk '\$1 ~ /^emulator-/ {print \$1}' || true); do
+            echo "stopping stray emulator \$serial so the matrix is deterministic" >&2
+            "\$ADB" -s "\$serial" emu kill > /dev/null 2>&1 || true
+          done
+          sleep 3
+
+          # One --list pass, then match in the shell: a per-API --list would
+          # re-fetch the remote repository four times over.
+          AVAILABLE="\$("\$SDKMANAGER" --sdk_root="\$SDK" --list 2>/dev/null || true)"
+
+          ran=''
+          skipped=''
+          for api in 34 35 36 37; do
+            IMAGE="system-images;android-\$api;aosp_atd;x86_64"
+            AVD="api\$api"
+
+            # api37 is listed for when Google publishes an image for it; until
+            # then it is skipped loudly rather than silently dropped.
+            if [[ "\$AVAILABLE" != *"\$IMAGE"* ]]; then
+              echo "SKIPPED \$AVD: \$IMAGE is not published yet" >&2
+              skipped="\$skipped \$AVD"
+              continue
+            fi
+
+            if [ ! -d "\$SDK/system-images/android-\$api/aosp_atd/x86_64" ]; then
+              echo "installing \$IMAGE" >&2
+              "\$SDKMANAGER" --sdk_root="\$SDK" "\$IMAGE" >&2
+            fi
+            if [ ! -f "\$AVDHOME/\$AVD.ini" ]; then
+              echo "creating AVD \$AVD" >&2
+              echo no | "\$AVDMANAGER" create avd -f -n "\$AVD" -k "\$IMAGE" >&2
+            fi
+
+            # -wipe-data keeps runs repeatable: the launch smoke test assumes
+            # a fresh install with no saved game.
+            "\$EMU" -avd "\$AVD" \\
+              -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \\
+              -gpu swiftshader_indirect -accel on -memory 1536 \\
+              > "\$CACHE/emulator-\$AVD.log" 2>&1 &
+            EMU_PID=\$!
+
+            # Poll for boot rather than sleeping a fixed amount: the first boot
+            # of a fresh AVD is much slower than a warm one.
+            booted=0
+            for _ in \$(seq 1 120); do
+              if [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ]; then
+                booted=1
+                break
+              fi
+              sleep 3
+            done
+            if [ "\$booted" != '1' ]; then
+              echo "\$AVD did not finish booting" >&2
+              "\$ADB" devices >&2 || true
+              tail -c 2000 "\$CACHE/emulator-\$AVD.log" >&2 || true
+              exit 1
+            fi
+            echo "\$AVD booted" >&2
+
+            "${gradleHome}" --no-daemon --stacktrace connectedDebugAndroidTest
+
+            ran="\$ran \$AVD"
+
+            # Stop it before the next API, or the next emulator cannot claim
+            # the console port.
+            "\$ADB" emu kill > /dev/null 2>&1 || true
+            kill "\$EMU_PID" > /dev/null 2>&1 || true
+            for _ in \$(seq 1 30); do
+              if [ -z "\$("\$ADB" devices | awk '\$1 ~ /^emulator-/' || true)" ]; then
+                break
+              fi
+              sleep 2
+            done
+          done
+
+          echo "emulator matrix -- tested:[\$ran] skipped:[\$skipped]"
+          if [ -z "\$ran" ]; then
+            echo "no AVD in the matrix could be started" >&2
+            exit 1
+          fi
+        """
+      }
+    }
+  }
+
   stage('Publish reports') {
-    junit allowEmptyResults: true, testResults: "${moduleDir}/app/build/test-results/**/*.xml"
+    junit allowEmptyResults: true, testResults: [
+      "${moduleDir}/app/build/test-results/**/*.xml",
+      "${moduleDir}/app/build/outputs/androidTest-results/connected/**/*.xml"
+    ]
     archiveArtifacts artifacts: "${moduleDir}/app/build/reports/lint-results-debug.html",
                      allowEmptyArchive: true, fingerprint: true
   }

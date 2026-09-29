@@ -20,6 +20,12 @@ android {
         versionCode 12
 
         versionName "1.0.12"
+
+        // Instrumented tests run against a real Android runtime, which the
+        // JVM unit tests cannot stand in for: org.json is a stub in unit tests
+        // (so Penalty's JSON round-trip throws there), and the launch smoke
+        // test needs a real Activity.
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     buildTypes {
@@ -52,4 +58,12 @@ kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
     }
+}
+
+// androidTest only -- the app itself still has no third-party dependencies.
+dependencies {
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }

@@ -111,8 +111,12 @@ node {
           exit 1
         fi
         echo "checksum ok (\$ACTUAL)" >&2
-        unzip -q -o "\$G.zip"
+        # The distribution zip has a top-level gradle-<version>/ dir, so without
+        # -d it would unpack into the workspace and the cached launcher below
+        # would not exist.
+        unzip -q -o "\$G.zip" -d "\$CACHE"
         fi
+        test -x "\$G/bin/gradle" || { echo "MISSING \$G/bin/gradle" >&2; exit 1; }
         "\$G/bin/gradle" --version >&2
         echo "\$G/bin/gradle"
       """,

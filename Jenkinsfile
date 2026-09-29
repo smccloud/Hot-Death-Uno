@@ -165,13 +165,14 @@ node {
   // needs a real Activity. So boot a headless AVD per API level and let Gradle
   // drive it.
   //
-  // The aosp_atd image is Google's headless test image -- no window, no GPU,
-  // no audio -- and with KVM it reaches boot_completed in about 20 seconds.
-  // Images and AVDs live in the toolcache, so this is a no-op after the first
-  // run.
+  // The google_apis image is a full Google APIs build, which is closer to what
+  // a user actually runs than aosp_atd -- and it boots headless all the same
+  // with -no-window. It is slower to boot and larger on disk than aosp_atd, so
+  // the boot poll below is generous. Images and AVDs live in the toolcache, so
+  // this is a no-op after the first run.
   //
-  // Sequential, not parallel: the controller has 8 GB of RAM, and four
-  // emulators at 1.5 GB each would thrash.
+  // Sequential, not parallel: the controller has 8 GB of RAM, and emulators
+  // this size would thrash if run together.
   stage('Emulator') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
@@ -216,7 +217,7 @@ node {
           ran=''
           skipped=''
           for api in 34 35 36 37; do
-            IMAGE="system-images;android-\$api;aosp_atd;x86_64"
+            IMAGE="system-images;android-\$api;google_apis;x86_64"
             AVD="api\$api"
 
             # api37 is listed for when Google publishes an image for it; until
@@ -227,7 +228,7 @@ node {
               continue
             fi
 
-            if [ ! -d "\$SDK/system-images/android-\$api/aosp_atd/x86_64" ]; then
+            if [ ! -d "\$SDK/system-images/android-\$api/google_apis/x86_64" ]; then
               echo "installing \$IMAGE" >&2
               "\$SDKMANAGER" --sdk_root="\$SDK" "\$IMAGE" >&2
             fi
@@ -240,7 +241,7 @@ node {
             # a fresh install with no saved game.
             "\$EMU" -avd "\$AVD" \\
               -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \\
-              -gpu swiftshader_indirect -accel on -memory 1536 \\
+              -gpu swiftshader_indirect -accel on -memory 2048 \\
               > "\$CACHE/emulator-\$AVD.log" 2>&1 &
             EMU_PID=\$!
 

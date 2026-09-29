@@ -5,78 +5,28 @@
 // workflow-basic-steps, workflow-durable-task-step, workflow-scm-step,
 // workflow-support, script-security.
 //
-// SCOPING TRAP -- read before editing:
-// Top-level `def` constants in a scripted Jenkinsfile compile to locals of
-// run(), not script fields. A `def` method cannot read them; it looks them up
-// in the Binding and throws MissingPropertyException. Every value a helper
-// needs is therefore passed in as a parameter, and the constants live inside
-// node{} so they are plain locals in scope at the call sites. Do not inline
-// them back into the helper bodies.
-
-def resolveGradle(String moduleDir, String cacheDir, String gradleVersion) {
-  if (file("${moduleDir}/gradle/wrapper/gradle-wrapper.jar").exists()) {
-    return './gradlew'
-  }
-  def dist = "${cacheDir}/gradle-${gradleVersion}"
-  if (!file("${dist}/bin/gradle").exists()) {
-    sh """
-      set -euo pipefail
-      mkdir -p '${cacheDir}'
-      curl -fsSL -o '${dist}.zip' \
-        'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip'
-      curl -fsSL -o '${dist}.zip.sha256' \
-        'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip.sha256'
-      cd '${cacheDir}' && sha256sum -c '${dist}.zip.sha256'
-      unzip -q -o '${dist}.zip'
-    """
-  }
-  return "${dist}/bin/gradle"
-}
-
-// 35.0.0 is AGP 8.11's *default* build-tools revision, and this project never
-// sets buildToolsVersion, so AGP resolves 35.0.0 regardless of how new the
-// installed revision is.
-def resolveAndroidSdk(String cacheDir, String api, String buildTools) {
-  def found = [env.ANDROID_HOME, env.ANDROID_SDK_ROOT, "${cacheDir}/android-sdk"]
-    .findAll { it }
-    .find { file("${it}/cmdline-tools").exists() || file("${it}/tools").exists() }
-  if (found) {
-    return found
-  }
-  def sdk = "${cacheDir}/android-sdk"
-  sh """
-    set -euo pipefail
-    mkdir -p '${sdk}/cmdline-tools'
-    curl -fsSL -o /tmp/cmdtools.zip \
-      'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip'
-    unzip -q -o /tmp/cmdtools.zip -d /tmp/cmdtools
-    rm -rf '${sdk}/cmdline-tools/latest'
-    mv /tmp/cmdtools/cmdline-tools '${sdk}/cmdline-tools/latest'
-    yes | '${sdk}/cmdline-tools/latest/bin/sdkmanager' --licenses > /dev/null
-    '${sdk}/cmdline-tools/latest/bin/sdkmanager' \
-      'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}'
-  """
-  return sdk
-}
-
-// AGP reads ANDROID_HOME, so local.properties is unnecessary -- which is what we
-// want, since it is gitignored and holds a machine-specific SDK path.
-def runGradle(String moduleDir, String gradleCmd, String sdkHome, String task) {
-  dir(moduleDir) {
-    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
-      sh "${gradleCmd} --no-daemon --stacktrace ${task}"
-    }
-  }
-}
+// DESIGN NOTE -- why almost nothing is done in Groovy here:
+// Every earlier failure in this file came from Groovy code touching Jenkins
+// objects inside the script-security sandbox. Top-level `def` constants are
+// locals of run(), not fields, so helper methods cannot read them. And
+// env.SOME_VAR does not necessarily return a String -- when unset it returns an
+// UninstantiatedDescribableWithInterpolation, so calling .exists() on it throws
+// MissingMethodException.
+//
+// So: keep Groovy to stage/stage ordering, and put the actual logic in `sh`
+// with returnStdout. Shell has none of those traps. If you add logic here, add
+// it in a heredoc, not in Groovy.
 
 node {
   def moduleDir = 'com.runtsoft.hotdeath'
-  def cacheDir = "${env.JENKINS_HOME ?: '/var/lib/jenkins'}/.toolcache/hotdeath"
   def gradleVersion = '8.13'
   def api = '36'
+  // AGP 8.11's *default* build-tools revision. This project never sets
+  // buildToolsVersion, so AGP resolves 35.0.0 no matter how new the installed
+  // revision is.
   def buildTools = '35.0.0'
-  def gradleCmd
   def sdkHome
+  def gradleHome
 
   stage('Checkout') {
     checkout scm
@@ -86,31 +36,89 @@ node {
     sh 'java -version 2>&1 | head -n 3'
   }
 
+  // Resolves to a usable SDK, downloading one on first run. Installation chatter
+  // goes to stderr so that returnStdout captures only the path.
   stage('Android SDK') {
-    sdkHome = resolveAndroidSdk(cacheDir, api, buildTools)
-    sh """
-      set -eu
-      test -d '${sdkHome}/platforms/android-${api}' || { echo "MISSING platform android-${api}"; exit 1; }
-      test -d '${sdkHome}/build-tools/${buildTools}' || { echo "MISSING build-tools ${buildTools}"; exit 1; }
-      echo "SDK verified at ${sdkHome}"
-    """
+    sdkHome = sh(
+      script: """
+        set -euo pipefail
+        CACHE="\${JENKINS_HOME:-/var/lib/jenkins}/.toolcache/hotdeath"
+        SDK="\$CACHE/android-sdk"
+
+        for c in "\${ANDROID_HOME:-}" "\${ANDROID_SDK_ROOT:-}" "\$SDK"; do
+          if [ -n "\$c" ] && [ -d "\$c/cmdline-tools" ]; then SDK="\$c"; break; fi
+        done
+
+        if [ ! -d "\$SDK/cmdline-tools" ]; then
+          echo "provisioning SDK at \$SDK" >&2
+          mkdir -p "\$SDK/cmdline-tools"
+          curl -fsSL -o /tmp/cmdtools.zip \\
+            'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip'
+          unzip -q -o /tmp/cmdtools.zip -d /tmp/cmdtools
+          rm -rf "\$SDK/cmdline-tools/latest"
+          mv /tmp/cmdtools/cmdline-tools "\$SDK/cmdline-tools/latest"
+          yes | "\$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "\$SDK/cmdline-tools/latest/bin/sdkmanager" \\
+            'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}'
+        fi
+
+        test -d "\$SDK/platforms/android-${api}" || { echo "MISSING platform android-${api}" >&2; exit 1; }
+        test -d "\$SDK/build-tools/${buildTools}"  || { echo "MISSING build-tools ${buildTools}" >&2; exit 1; }
+        echo "\$SDK"
+      """,
+      returnStdout: true
+    ).trim()
+    echo "ANDROID_HOME=${sdkHome}"
   }
 
   stage('Gradle') {
-    gradleCmd = resolveGradle(moduleDir, cacheDir, gradleVersion)
-    sh "${gradleCmd} --version | sed -n '1,8p'"
+    gradleHome = sh(
+      script: """
+        set -euo pipefail
+        CACHE="\${JENKINS_HOME:-/var/lib/jenkins}/.toolcache/hotdeath"
+        G="\$CACHE/gradle-${gradleVersion}"
+        if [ ! -x "\$G/bin/gradle" ]; then
+          echo "fetching Gradle ${gradleVersion}" >&2
+          mkdir -p "\$CACHE"
+          curl -fsSL -o "\$G.zip" \\
+            'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip'
+          curl -fsSL -o "\$G.zip.sha256" \\
+            'https://services.gradle.org/distributions/gradle-${gradleVersion}-bin.zip.sha256'
+          ( cd "\$CACHE" && sha256sum -c "\$G.zip.sha256" )
+          unzip -q -o "\$G.zip"
+        fi
+        "\$G/bin/gradle" --version >&2
+        echo "\$G/bin/gradle"
+      """,
+      returnStdout: true
+    ).trim()
+    echo "gradle=${gradleHome}"
   }
 
+  // AGP reads ANDROID_HOME, so local.properties is unnecessary -- which is what
+  // we want, since it is gitignored and holds a machine-specific SDK path.
   stage('Unit tests') {
-    runGradle(moduleDir, gradleCmd, sdkHome, 'testDebugUnitTest')
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh "${gradleHome} --no-daemon --stacktrace testDebugUnitTest"
+      }
+    }
   }
 
   stage('Lint') {
-    runGradle(moduleDir, gradleCmd, sdkHome, 'lintDebug')
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh "${gradleHome} --no-daemon --stacktrace lintDebug"
+      }
+    }
   }
 
   stage('Assemble') {
-    runGradle(moduleDir, gradleCmd, sdkHome, 'assembleDebug')
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh "${gradleHome} --no-daemon --stacktrace assembleDebug"
+      }
+    }
   }
 
   stage('Publish reports') {
@@ -120,12 +128,12 @@ node {
   }
 
   stage('Archive') {
+    archiveArtifacts artifacts: "${moduleDir}/app/build/outputs/apk/debug/*.apk",
+                     allowEmptyArchive: true, fingerprint: true
     def apks = file("${moduleDir}/app/build/outputs/apk/debug").listFiles()
     if (apks == null || apks.findAll { it.name.endsWith('.apk') }.isEmpty()) {
       echo 'WARNING: no APK produced, yet the build reported success'
       currentBuild.result = 'UNSTABLE'
-    } else {
-      archiveArtifacts artifacts: "${moduleDir}/app/build/outputs/apk/debug/*.apk", fingerprint: true
     }
   }
 }

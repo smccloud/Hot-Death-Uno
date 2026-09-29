@@ -3,10 +3,16 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        gradlePluginPortal()
     }
 
     dependencies {
         classpath 'com.android.tools.build:gradle:8.11.1'
+        // Kotlin 2.4.x is the newest line whose fully-supported AGP range
+        // (8.5.2-9.1.0) still covers the 8.11.1 above, and whose Gradle range
+        // (7.6.3-9.5.0) covers 8.13. Kotlin 2.1.x is NOT valid here: its AGP
+        // support stops at 8.7.2, despite AGP 8.11.1 embedding kotlin-stdlib 2.1.20.
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.20'
     }
 }
 

@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
 
 android {
 
@@ -34,4 +35,14 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+// jvmTarget must match compileOptions exactly or the build fails with
+// "Inconsistent JVM-target compatibility". Deliberately not using
+// jvmToolchain(17): toolchain resolution would hard-fail on a machine with no
+// JDK 17 present, and Gradle can only auto-provision it with the foojay
+// resolver configured in settings.gradle, which this project does not have.
+// Set the target, run on whatever JDK 17+ is available.
+kotlinOptions {
+    jvmTarget = '17'
 }

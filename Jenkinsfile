@@ -68,9 +68,10 @@ node {
           SDKMANAGER="\$SDK/cmdline-tools/latest/bin/sdkmanager"
         fi
         echo "using sdkmanager: \$SDKMANAGER" >&2
+        echo "sdk_root: \$SDK" >&2
 
-        yes | "\$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-        "\$SDKMANAGER" \\
+        yes | "\$SDKMANAGER" --sdk_root="\$SDK" --licenses > /dev/null 2>&1 || true
+        "\$SDKMANAGER" --sdk_root="\$SDK" \\
           'platform-tools' 'platforms;android-${api}' 'build-tools;${buildTools}'
 
         test -d "\$SDK/platforms/android-${api}" || { echo "MISSING platform android-${api}" >&2; exit 1; }

@@ -1,5 +1,17 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// Release signing material, read from keystore.properties beside this file when
+// it exists. That file is gitignored and holds the four secrets, so nothing
+// about the key lives in git. Without it the release variant falls back to the
+// debug key, which keeps a fresh clone buildable and keeps CI's release stage
+// from failing for anyone who has not set one up.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = file('keystore.properties')
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
@@ -42,19 +54,33 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
+    // Declared only when keystore.properties is there, so an empty signing
+    // config never reaches AGP's validation. RELEASE_SIGNING.md has the keytool
+    // invocation and the CI side.
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
 
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // Signed with the debug key, deliberately and temporarily: the
-            // project has no release keystore, and an unsigned APK cannot be
-            // installed, so there is nothing to publish until one is configured.
-            // Everything else about this variant is a real release build --
-            // minified by R8, no 'g' suffix on the version name. Swapping in a
-            // proper signingConfig is the only change needed later; keep the
-            // keystore and its passwords out of this file either way.
-            signingConfig signingConfigs.debug
+            // The release key when there is one, the debug key when there is
+            // not. The fallback is the reason the signingConfigs block above is
+            // guarded: this project has no release keystore yet, and an unsigned
+            // APK cannot be installed, so a clone with no keystore has to produce
+            // something installable rather than fail. Everything else about this
+            // variant is already a real release build -- minified by R8, no 'g'
+            // suffix on the version name.
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
         }
         debug {
             versionNameSuffix = 'g'

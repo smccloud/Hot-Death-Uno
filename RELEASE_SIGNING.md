@@ -3,11 +3,15 @@
 How to give the `release` variant a real signing key instead of the debug key it
 uses today, and how to keep the key itself out of git.
 
-**Where this stands:** `app/build.gradle` signs the release variant with
-`signingConfigs.debug`, because this project has no release keystore and an
-unsigned APK cannot be installed — there is nothing to publish without one. The
-release build is otherwise real: R8-minified, no `g` suffix on the version name.
-Everything below is the swap.
+**Where this stands:** the release variant picks up a real key when one is
+configured and falls back to `signingConfigs.debug` when it is not, so the
+release build is installable either way. It is otherwise a real release build:
+R8-minified, no `g` suffix on the version name.
+
+**Status of the steps below.** Steps 2 and 3 are already applied — the
+`.gitignore` rules and the `build.gradle` wiring are in the repository, so do not
+re-apply them. Steps 1, 4, 5 and 6 are what is left, and they need the key, which
+does not exist yet. Step 7 explains why the delay is not harmless.
 
 ## Before you start: this key is unrecoverable
 
@@ -59,7 +63,8 @@ Keep the alias (`hotdeath`) — it is referenced in `keystore.properties` below.
 `.gitignore` already ignores `*.jks` and `*.keystore`, so the key file is covered.
 `keystore.properties` is not: it has no extension, so neither rule matches it, and
 it is the file most likely to be committed by accident because it looks like
-ordinary configuration. Add to the existing "Signing material" block:
+ordinary configuration. Add to the existing "Signing material" block *(already
+applied)*:
 
 ```gitignore
 keystore.properties
@@ -79,7 +84,7 @@ git check-ignore -v com.smccloud.hotdeath/app/keystore.properties
 
 ## 3. Wire it into `app/build.gradle`
 
-Add this **above** the `android {` block:
+Add this **above** the `android {` block *(already applied)*:
 
 ```groovy
 // Release signing material, read from keystore.properties beside this file when
@@ -95,7 +100,7 @@ if (hasReleaseKeystore) {
 }
 ```
 
-Add a `signingConfigs` block inside `android { }`:
+Add a `signingConfigs` block inside `android { }` *(already applied)*:
 
 ```groovy
     signingConfigs {
@@ -112,7 +117,7 @@ Add a `signingConfigs` block inside `android { }`:
     }
 ```
 
-Then change the last line of the `release` build type, replacing
+Then change the last line of the `release` build type *(already applied)*, replacing
 `signingConfig signingConfigs.debug`:
 
 ```groovy

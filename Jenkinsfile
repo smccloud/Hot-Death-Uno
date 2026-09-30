@@ -381,10 +381,9 @@ node {
     // AGP empties outputs/androidTest-results/connected/debug on every run and a
     // sequential matrix would otherwise publish only the last API. Failing tests
     // here fail the build, which is exactly what we want for the enforced levels.
-    junit allowEmptyResults: true, testResults: [
-      "${moduleDir}/app/build/test-results/**/*.xml",
+    junit allowEmptyResults: true, testResults:
+      "${moduleDir}/app/build/test-results/**/*.xml," +
       "${moduleDir}/app/build/instrumented-results/**/*.xml"
-    ]
     archiveArtifacts artifacts: "${moduleDir}/app/build/reports/lint-results-debug.html",
                      allowEmptyArchive: true, fingerprint: true
     // Known-failing levels (see KNOWN_FAILING) are archived rather than

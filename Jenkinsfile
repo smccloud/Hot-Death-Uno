@@ -166,6 +166,47 @@ node {
     }
   }
 
+  // Materialise the release signing material into the workspace, then let it be
+  // destroyed again below. Two secret-text credentials hold it: the keystore
+  // base64-encoded, and the four keystore.properties values. There is no
+  // file-credentials plugin on this controller, which is why the key arrives as
+  // text rather than as withCredentials([file(...)]).
+  //
+  // NOT inside dir(moduleDir): the paths have to land in the module directory,
+  // because that is where build.gradle's file('keystore.properties') looks.
+  stage('Signing material') {
+    // Forgiving on purpose, and the catch is wide on purpose too. A fork
+    // without these credentials should still get a build -- with the release
+    // variant falling back to the debug key, which is what it did until now --
+    // rather than a red pipeline over a missing secret. Anything that leaves
+    // the material present but wrong does not get swallowed: a bad password
+    // fails assembleRelease loudly a stage later, which is the right place for
+    // it. `set -u` without `-e` so a failed decode lands in this catch and says
+    // so, rather than continuing past it.
+    try {
+      withCredentials([
+        string(credentialsId: 'hotdeath-release-jks', variable: 'HOTDEATH_JKS_B64'),
+        string(credentialsId: 'hotdeath-release-signing', variable: 'HOTDEATH_SIGNING'),
+      ]) {
+        sh """
+          set -u
+          # Pre-clean, so a previous run's material can never be picked up: the
+          # checkout's clean-before-checkout is not pinned in this job's config.
+          rm -f app/keystore/keystore.properties app/keystore/hotdeath-release.jks
+          mkdir -p app/keystore
+          # -d accepts both wrapped and unwrapped base64, so the credential can
+          # hold either without this caring.
+          printf '%s' "\$HOTDEATH_JKS_B64" | base64 -d > app/keystore/hotdeath-release.jks
+          chmod 600 app/keystore/hotdeath-release.jks
+          printf '%s\n' "\$HOTDEATH_SIGNING" > app/keystore/keystore.properties
+          chmod 600 app/keystore/keystore.properties
+        """
+      }
+    } catch (err) {
+      echo 'WARNING: no usable signing credentials -- the release APK will be debug-signed'
+    }
+  }
+
   // Deliberately before the Emulator stage: R8 is a separate code path from
   // assembleDebug and it is the one that produces the published artifact, so a
   // minification failure should cost seconds here rather than the 25 minutes the
@@ -174,6 +215,23 @@ node {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
         sh "${gradleHome} --no-daemon --stacktrace assembleRelease"
+      }
+    }
+  }
+
+  // Which key actually signed the artifact, in the log where it can still be
+  // read months later. `apksigner verify` is a gate as much as a report: it exits
+  // non-zero on an APK that does not verify, so a broken signature cannot reach
+  // the Archive stage. The certificate fingerprint it prints is public
+  // information -- nothing here is the secret.
+  stage('Signing report') {
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh """
+          set -euo pipefail
+          "\${ANDROID_HOME}/build-tools/${buildTools}/apksigner" verify --verbose --print-certs \\
+            app/build/outputs/apk/release/app-release.apk
+        """
       }
     }
   }
@@ -645,5 +703,18 @@ node {
     } else {
       echo "Publishable artifact(s):\n${releaseApks}"
     }
+  }
+
+  // Destroy the signing material, which is a plaintext keystore password in the
+  // workspace. This runs on the way out of a successful pipeline only -- a
+  // pipeline-level `post` is not valid inside `node`, and wrapping every stage
+  // in try/finally to get the same guarantee is not worth reindenting 600 lines
+  // over. The Signing material stage pre-cleans before it writes, so the
+  // residual risk is a failed build leaving the file on disk until the next run,
+  // never a stale key being used.
+  stage('Remove signing material') {
+    sh """
+      rm -f ${moduleDir}/app/keystore/keystore.properties ${moduleDir}/app/keystore/hotdeath-release.jks
+    """
   }
 }

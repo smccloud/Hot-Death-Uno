@@ -44,14 +44,14 @@ node {
     dir(moduleDir) {
       sh '''
         set -u
-        rm -rf ../../app/keystore
-        STALE=$(sed -n 's/^storeFile=//p' app/keystore/keystore.properties 2>/dev/null | head -1 || true)
+        rm -rf ../../app/keystore app/keystore
+        STALE=$(sed -n 's/^storeFile=//p' app/keystore.properties 2>/dev/null | head -1 || true)
         case "$STALE" in
           '') ;;
           /*) rm -f "$STALE" ;;
           *) rm -f "app/$STALE" ;;
         esac
-        rm -rf app/keystore
+        rm -f app/keystore.properties app/.signing.raw
         # Also sweep the module dir. The rm above only knows the path the current
         # properties name, so a keystore left by a run whose storeFile was
         # different would survive; nothing checked out ends in .jks, since every
@@ -210,6 +210,13 @@ node {
   // APK from before any of this existed. Only the Signing report stage below
   // caught it. Deriving the path from moduleDir instead of writing it out means
   // it cannot disagree with the teardown stage again.
+  //
+  // Being in the right directory was still not sufficient, which is what #50
+  // and #54 between them cost: the properties file has to be at
+  // app/keystore.properties, directly beside build.gradle, and not at
+  // app/keystore/keystore.properties. file() resolves against the project
+  // directory, so the subdirectory version is invisible to it -- the file
+  // existed, the checks all passed, and hasReleaseKeystore was still false.
   stage('Signing material') {
     // Forgiving on purpose, and the catch is wide on purpose too. A fork
     // without these credentials should still get a build -- with the release
@@ -243,7 +250,6 @@ node {
           set -eu
           # A previous run's material can otherwise be picked up, because this
           # job's SCM config does not pin clean-before-checkout.
-          mkdir -p app/keystore
           # Properties first, keystore second. The other order looked natural and
           # was wrong: the keystore has to land at whatever path storeFile names,
           # and storeFile is not known until the blob is parsed.
@@ -267,12 +273,13 @@ node {
           # sed pass because in the pass that inserts the newlines, `$` anchors to
           # the end of the whole pattern space rather than to each line, so it
           # would only ever reach the last pair.
-          RAW_PROPS=app/keystore/.signing.raw
+          PROPS=app/keystore.properties
+          RAW_PROPS=app/.signing.raw
           printf '%s\n' "$HOTDEATH_SIGNING" > "$RAW_PROPS"
           chmod 600 "$RAW_PROPS"
-          tr -d '\\r' < "$RAW_PROPS" | sed -e 's/storeFile=/\\nstoreFile=/' -e 's/storePassword=/\\nstorePassword=/' -e 's/keyAlias=/\\nkeyAlias=/' -e 's/keyPassword=/\\nkeyPassword=/' | sed -e 's/[[:space:]]*$//' -e '/^$/d' > app/keystore/keystore.properties
+          tr -d '\\r' < "$RAW_PROPS" | sed -e 's/storeFile=/\\nstoreFile=/' -e 's/storePassword=/\\nstorePassword=/' -e 's/keyAlias=/\\nkeyAlias=/' -e 's/keyPassword=/\\nkeyPassword=/' | sed -e 's/[[:space:]]*$//' -e '/^$/d' > "$PROPS"
           rm -f "$RAW_PROPS"
-          chmod 600 app/keystore/keystore.properties
+          chmod 600 "$PROPS"
           # Name the keys that are missing. Never their values, and never any
           # fragment of the credential: build #51 printed the whole blob into
           # the console log by echoing a value cut out of it, and Jenkins' log
@@ -280,7 +287,7 @@ node {
           # it. Nothing derived from that credential is echoed from here on.
           MISSING=
           for KEY in storeFile storePassword keyAlias keyPassword; do
-            grep -q "^${KEY}=" app/keystore/keystore.properties || MISSING="${MISSING} ${KEY}"
+            grep -q "^${KEY}=" "$PROPS" || MISSING="${MISSING} ${KEY}"
           done
           if [ -n "$MISSING" ]; then
             echo "ERROR: keystore.properties is missing:${MISSING}"
@@ -289,10 +296,10 @@ node {
           # Honour storeFile rather than imposing a path on it. build.gradle
           # calls file(storeFile) from the app module, so a relative storeFile
           # resolves against that directory -- and #53 is what insisting on
-          # app/keystore/hotdeath-release.jks instead looked like: the credential
+          # a fixed path instead looked like: the credential
           # says hotdeath-release.jks, which is a perfectly good answer, and the
           # stage refused it. Write the key where Gradle will look for it.
-          STORE_FILE=$(sed -n 's/^storeFile=//p' app/keystore/keystore.properties | head -1)
+          STORE_FILE=$(sed -n 's/^storeFile=//p' "$PROPS" | head -1)
           case "$STORE_FILE" in
             /*) RESOLVED_STORE="$STORE_FILE" ;;
             *) RESOLVED_STORE="app/$STORE_FILE" ;;

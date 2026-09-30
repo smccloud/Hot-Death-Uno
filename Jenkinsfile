@@ -277,13 +277,28 @@ node {
             fi
             echo "disk.dataPartition.size=\$DATA_PARTITION_BYTES" >> "\$CFG"
 
+            # RAM per level. The older images settle on 2 GB; the Android 17
+            # image does not. It restarts system_server repeatedly through boot
+            # (156 restarts logged on one run, PIDs climbing 660 -> 32679) and
+            # once settled its package service is still saturated --
+            # PackageManagerService.snapshotComputer with waiters=26 and 500ms
+            # of monitor contention -- which is enough to make the install fail
+            # with "Broken pipe (32)". More room is the first thing to try
+            # before blaming the image. Safe to give it extra only because the
+            # matrix runs one AVD at a time, so nothing else wants the memory.
+            MEM=2048
+            if [ "\$api" = 37 ]; then
+              MEM=4096
+            fi
+
             # -wipe-data keeps runs repeatable: the launch smoke test assumes
             # a fresh install with no saved game.
             "\$EMU" -avd "\$AVD" \\
               -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \\
-              -gpu swiftshader_indirect -accel on -memory 2048 \\
+              -gpu swiftshader_indirect -accel on -memory "\$MEM" \\
               > "\$CACHE/emulator-\$AVD.log" 2>&1 &
             EMU_PID=\$!
+            echo "\$AVD: booting with \${MEM} MB of RAM" >&2
 
             # Poll for boot rather than sleeping a fixed amount: the first boot
             # of a fresh AVD is much slower than a warm one.

@@ -6,7 +6,7 @@ Java-to-Kotlin migration.
 | --- | --- | --- |
 | ~~0~~ | ~~Add Kotlin plugin to `app/build.gradle` only, no source changes~~ | ~~one CI compile~~ |
 | ~~1~~ | ~~Run a headless Android emulator in Jenkins so `connectedAndroidTest` can take over the "manual on-device" checks below. Needs KVM / nested virtualisation on the controller, `-no-window -gpu off`, and the AVD plus system image cached rather than re-downloaded every run.~~ — done: the matrix runs API 34-36, all 9 tests each, all enforced | build #40: 27/27 passed, `tested:[api34 api35 api36] known-failing:[]` |
-| 2 | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand)~~ — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM. | `testDebugUnitTest` |
+| ~~2~~ | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand)~~ — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM. | build #43: 114/114 passed, full pipeline green |
 | 3 | Convert leaf classes mechanically | tests stay green |
 | 4 | `Player` hierarchy → `Game` / `ComputerPlayer` | tests + review |
 | 5 | Android UI last (GameActivity, GameTable, Main, Prefs) | manual on-device |
@@ -14,6 +14,17 @@ Java-to-Kotlin migration.
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
 | 9 | ~~Make the app's activities launch on API 37, then promote it from known-failing to enforced in the Jenkins matrix~~ — cannot be done on this controller. The platform was ruled out: no published 37.x x86_64 image can either install the app or finish booting. Dropped from the matrix rather than left failing. Detail below. | re-add it when Google ships a working image |
+
+## Bugs the unit tests found
+
+Stage 2 turned up three defects in the app itself. They are recorded rather than fixed here, because fixing them changes behaviour and is not what that stage was for. The round-trip tests deliberately use a multiplier of `2.0` and the Shitter tests assert current behaviour, so all three will start failing loudly once fixed — which is the point.
+
+| Item | Detail | Verifiable by |
+| --- | --- | --- |
+| Save/resume truncates card multipliers | `Card`'s `JSONObject` constructor reads `m_pointMultiplier` with `getInt` even though the field is a `double`. The 0.5 Holy Defender (`CardDeck`'s red 0) resumes as `0.0`, so a saved game silently changes what that card is worth. `getDouble` fixes it. | round-trip a hand holding a 0.5 card |
+| The Shitter's 150 is never used | `Hand.calculateValue` gives the Shitter a pseudo-value of 150 in step 2 so the AI unloads it, but step 3 then runs over every card and overwrites `currentValue` with the real point value of 0. Step 10's floor therefore compares against 0, not 150, and only fires when Magic 5 has pushed the total negative. Either restore the pseudo-value after step 3 or drop step 2 and score it deliberately. | score a hand holding a Shitter |
+| Every card label is double-spaced | The `cardcolor_*` strings all end in a trailing space, and `Card.toString` joins colour and value with another one, so a plain card renders `"Blue  7"` and a Reverse `"Green  Reverse"`. Either trim the strings or drop the join. | read any card label |
+| Still uncovered | `Hand.hasValidCards` needs a real `Game` (it calls `checkCard`), and the `isfinal` path adds to `Player.getVirusPenalty` for the green 3, so both need a `Context`. Both are reachable under Robolectric. | `GameOptionsTest`-style activity |
 
 ## Messaging
 

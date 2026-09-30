@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.1.143 (`versionCode` 1001143) |
+| Current version | 1.2.164 (`versionCode` 1002164) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 (no third-party dependencies) |
 | Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
@@ -304,7 +304,7 @@ but never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1001143
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1002164
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
@@ -553,14 +553,19 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.1.143, migrated to a modern Gradle /
-AGP 7.3.0 toolchain.
+May 2011; the current source tree is version 1.2.164, migrated to a modern Gradle /
+AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced
 the artifact — it moves by 0.0.1 per test rather than being maintained by hand — so
-`versionName` 1.1.143 means 116 unit tests plus 27 instrumented all went green.
+`versionName` 1.2.164 means 137 unit tests plus 27 instrumented all went green.
 `versionCode` encodes the same three numbers as `major * 1000000 + minor * 1000 +
 patch`, which leaves three digits each for the minor and the patch.
+
+1.2.0 reset the patch to 0 and moved the minor instead. A release that adds no tests
+has no new patch number to move to, and 1.1.143 had gone out signed with the debug
+key, which Android refuses to replace with a differently signed build at the same
+`versionCode` — so the minor carries releases until the test count moves again.
 
 See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
 and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.

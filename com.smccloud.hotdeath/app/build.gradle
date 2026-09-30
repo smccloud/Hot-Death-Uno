@@ -41,10 +41,19 @@ android {
         // the patch; when the patch count reaches 1000, bump the minor and start
         // the patch over at 0.
         //
-        // 1.1.143 = 116 unit tests plus 27 instrumented, as build #45 ran them.
-        versionCode 1001143
+        // 1.1.143 = 116 unit tests plus 27 instrumented, as build #45 ran them,
+        // and is the last purely test-derived version.
+        //
+        // 1.2.0 resets the patch and is the first build carrying the release
+        // signing key. The patch counts tests, not releases, so a release that
+        // adds no tests -- re-signing a rebuilt artifact, say -- moves the minor
+        // instead. Read the patch off the build when it advances; move the minor
+        // when it does not. It has to move at all: 1.1.143 was published signed
+        // with the debug key, and Android refuses to install a differently
+        // signed build over the same versionCode.
+        versionCode 1002000
 
-        versionName "1.1.143"
+        versionName "1.2.0"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

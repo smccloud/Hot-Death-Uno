@@ -55,8 +55,11 @@ android {
     }
 
     // Declared only when keystore.properties is there, so an empty signing
-    // config never reaches AGP's validation. RELEASE_SIGNING.md has the keytool
-    // invocation and the CI side.
+    // config never reaches AGP's validation. The CI side of this lives in the
+    // Jenkinsfile's Signing material and Signing report stages, and the file
+    // itself has to sit directly beside this one -- file('keystore.properties')
+    // resolves against this project directory and does not look in
+    // subdirectories.
     signingConfigs {
         if (hasReleaseKeystore) {
             release {

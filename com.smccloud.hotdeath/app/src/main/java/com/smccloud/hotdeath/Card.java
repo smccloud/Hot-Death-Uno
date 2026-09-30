@@ -302,7 +302,9 @@ public class Card {
 			break;
 		}	
 
-		msg = strColor + " " + strValue;
+		// The trailing space in the cardcolor_* strings is the separator, so
+		// adding another one here is what used to double-space every label.
+		msg = strColor + strValue;
 		return msg;
 	}
 	

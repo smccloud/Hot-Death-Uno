@@ -1,6 +1,7 @@
 package com.smccloud.hotdeath;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 
 import android.content.Context;
@@ -34,34 +35,31 @@ public class CardTextTest
 	}
 
 	/**
-	 * An unremarkable numbered card reads colour then value. Note the two
-	 * spaces: the colour strings in strings.xml all carry a trailing space and
-	 * toString joins with another one.
+	 * An unremarkable numbered card reads colour then value. The single space
+	 * between them is the trailing space that the colour strings in strings.xml
+	 * carry; toString adds none of its own.
 	 */
 	@Test
 	public void aNumberedCardIsPrefixedWithItsColour ()
 	{
 		Card c = new Card(0, Card.COLOR_BLUE, 7, Card.ID_BLUE_7, 7);
 
-		assertEquals (m_context.getString (R.string.cardcolor_blue) + " " + 7, c.toString (m_context));
+		assertEquals (m_context.getString (R.string.cardcolor_blue) + 7, c.toString (m_context));
 	}
 
 	/**
 	 * The ID switch only covers the named cards. Everything else falls through
 	 * to the value switch, which is what gives Reverse its name here.
 	 *
-	 * Note the colour is still prepended on this path: toString joins
-	 * strColor and strValue with a space, and the colour strings already end in
-	 * one, so these labels come out double-spaced. That is the app's existing
-	 * behaviour and it is the same for every numbered card, so the expectation
-	 * spells out both halves rather than the whole string.
+	 * The colour is still prepended on this path, and again the separation is
+	 * the colour string's own trailing space rather than a join of its own.
 	 */
 	@Test
 	public void aReverseCardIsNamedByItsValue ()
 	{
 		Card c = new Card(0, Card.COLOR_GREEN, Card.VAL_R, Card.ID_GREEN_R, 20);
 
-		assertEquals (m_context.getString (R.string.cardcolor_green) + " "
+		assertEquals (m_context.getString (R.string.cardcolor_green)
 			+ m_context.getString (R.string.cardval_r), c.toString (m_context));
 	}
 
@@ -70,7 +68,7 @@ public class CardTextTest
 	{
 		Card c = new Card(0, Card.COLOR_RED, Card.VAL_D, Card.ID_RED_D, 20);
 
-		assertEquals (m_context.getString (R.string.cardcolor_red) + " "
+		assertEquals (m_context.getString (R.string.cardcolor_red)
 			+ m_context.getString (R.string.cardval_d), c.toString (m_context));
 	}
 
@@ -111,7 +109,7 @@ public class CardTextTest
 	{
 		Card c = new Card(0, Card.COLOR_YELLOW, 5, Card.ID_YELLOW_5, 5);
 
-		assertEquals (m_context.getString (R.string.cardcolor_yellow) + " " + 5, c.toString (m_context));
+		assertEquals (m_context.getString (R.string.cardcolor_yellow) + 5, c.toString (m_context));
 	}
 
 	@Test
@@ -156,6 +154,34 @@ public class CardTextTest
 	{
 		Card c = new Card(0, Card.COLOR_YELLOW, 0, Card.ID_YELLOW_0, 0);
 
-		assertEquals (m_context.getString (R.string.cardcolor_yellow) + " " + 0, c.toString (m_context));
+		assertEquals (m_context.getString (R.string.cardcolor_yellow) + 0, c.toString (m_context));
+	}
+
+	/**
+	 * The expectations above are written against the resource strings, so on
+	 * their own they cannot tell one space from two: strip the trailing space out
+	 * of strings.xml and every one of them still passes, leaving "Blue7". What
+	 * pins the shape of the rendered label is this one -- a card name with a gap
+	 * in it is the defect, whichever half of the join owns the space.
+	 */
+	@Test
+	public void noCardLabelCarriesADoubleSpace ()
+	{
+		Card[] cards = {
+			new Card(0, Card.COLOR_BLUE, 7, Card.ID_BLUE_7, 7),
+			new Card(0, Card.COLOR_GREEN, Card.VAL_R, Card.ID_GREEN_R, 20),
+			new Card(0, Card.COLOR_RED, Card.VAL_D, Card.ID_RED_D, 20),
+			new Card(0, Card.COLOR_YELLOW, Card.VAL_S_DOUBLE, Card.ID_YELLOW_S_DOUBLE, 40),
+			new Card(0, Card.COLOR_YELLOW, Card.VAL_R_SKIP, Card.ID_YELLOW_R_SKIP, 20),
+			new Card(0, Card.COLOR_YELLOW, 0, Card.ID_YELLOW_0, 0),
+			new Card(0, Card.COLOR_RED, 5, Card.ID_RED_5_MAGIC, -5),
+			new Card(0, Card.COLOR_WILD, Card.VAL_WILD, Card.ID_WILD, 50),
+		};
+
+		for (Card c : cards)
+		{
+			String label = c.toString (m_context);
+			assertFalse ('"' + label + "\" reads with a gap in it", label.contains ("  "));
+		}
 	}
 }

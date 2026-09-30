@@ -256,8 +256,8 @@ node {
             # -wipe-data below rebuilds userdata, so the new size takes effect.
             DATA_PARTITION_BYTES=6442450944
             CFG="\$AVDHOME/\$AVD.avd/config.ini"
-            if grep -q 'disk\.dataPartition\.size' "\$CFG"; then
-              sed -i '/^[[:space:]]*disk\.dataPartition\.size[[:space:]]*=/d' "\$CFG"
+            if grep -q 'disk\\.dataPartition\\.size' "\$CFG"; then
+              sed -i '/^[[:space:]]*disk\\.dataPartition\\.size[[:space:]]*=/d' "\$CFG"
               echo "enlarging data partition to \$DATA_PARTITION_BYTES bytes for \$AVD" >&2
             fi
             echo "disk.dataPartition.size=\$DATA_PARTITION_BYTES" >> "\$CFG"

@@ -428,15 +428,34 @@ node {
 
             # Stop it before the next API, or the next emulator cannot claim
             # the console port.
+            #
+            # `adb emu kill` alone is not enough. It asks the emulator to shut
+            # down, and the emulator can decline or take longer than the wait
+            # allows; one run left api36 listed as "device" for the whole 60s
+            # window, so the next level would have booted alongside it. So
+            # escalate rather than hope: kill the console, then the process,
+            # then force it, and only believe the list once it is empty.
             "\$ADB" emu kill > /dev/null 2>&1 || true
             kill "\$EMU_PID" > /dev/null 2>&1 || true
             torn_down=0
-            for _ in \$(seq 1 30); do
+            attempt=0
+            while [ "\$attempt" -lt 30 ]; do
+              attempt=\$((attempt + 1))
               if [ -z "\$("\$ADB" devices | awk '\$1 ~ /^emulator-/' || true)" ]; then
                 torn_down=1
                 break
               fi
               sleep 2
+              # Past the halfway point, stop asking nicely.
+              if [ "\$attempt" = 15 ]; then
+                "\$ADB" kill-server > /dev/null 2>&1 || true
+                "\$ADB" start-server > /dev/null 2>&1 || true
+                kill -9 "\$EMU_PID" > /dev/null 2>&1 || true
+                # Anything still holding emulator-* after our kill is not ours.
+                for pid in \$(pgrep -f 'qemu-system' || true); do
+                  kill -9 "\$pid" > /dev/null 2>&1 || true
+                done
+              fi
             done
 
             # Do not fall through on a failed teardown. A surviving emulator

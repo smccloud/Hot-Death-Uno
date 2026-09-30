@@ -47,11 +47,14 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 
 ## API 37
 
-The Jenkins matrix runs the same APK on API 34-37. 34, 35, and 36 launch `Main` fine; API 37 refuses to launch any of the app's activities, so it is currently a known-failing level (reported and archived, not enforced).
+The Jenkins matrix runs the same APK on API 34-37. API 37 is currently a known-failing level (reported and archived, not enforced).
+
+**The original diagnosis for this was wrong and has been retracted.** It read `am start -n com.smccloud.hotdeath/.Main` returning `Activity class does not exist` as proof the platform could not launch the app. But `connectedAndroidTest` uninstalls both APKs when a run finishes, so that command was being run against a device that no longer had the app installed. It produces the same error on every API level, passing or not. Anything concluded from it has to be re-derived from a device where the app is genuinely installed.
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| Activity won't resolve | `am start -n com.smccloud.hotdeath/.Main` fails with `Activity class does not exist` on API 37, even on a healthy image where Settings launches. `Main` is `classes3.dex`, `exported=true`, MAIN/LAUNCHER filter registered; `pm enable` and forced dex compilation don't help. The app targets SDK 36 and has never been validated on Android 17. | `am start -n com.smccloud.hotdeath/.Main` succeeds |
-| Ruling out the image | Before sinking time into the app, test `system-images;android-37.0;default;x86_64`: if the AOSP image launches the app, the `google_apis` 37.0 image is the culprit and a different tag is the fix. | launching on the AOSP image |
+| Re-derive the real cause | With the app actually installed, `MainLaunchTest` fails on 37 with `Unable to resolve activity for: Intent { act=MAIN cat=[LAUNCHER] cmp=com.smccloud.hotdeath.test/com.smccloud.hotdeath.Main}`. Note the component package is the *test* APK's, so the harness may be building a component name in the wrong package rather than the platform refusing a valid one. `ActivityScenario.launch` is the thing to check first. The 6 `PenaltyStackTest` cases pass on 37, so the app itself installs and runs there. | `MainLaunchTest` passes on 37 with the app installed |
+| Matrix integrity | A level can be reported as run without running: `connectedAndroidTest` targets every attached device, so a surviving emulator from the previous level makes the next level's suite run against the *old* device. Fixed by failing the build when teardown does not complete, and by requiring the device to be `device` (not `offline`) before booting. | a level's reported test count matches the level it claims |
+| Ruling out the image | Only worth doing once the above says the platform itself is at fault. Test `system-images;android-37.0;default;x86_64`: if the AOSP image launches the app, the `google_apis` 37.0 image is the culprit and a different tag is the fix. | launching on the AOSP image |
 | Promote back to enforced | Once `MainLaunchTest` passes on 37, remove `37` from `KNOWN_FAILING` in the `Jenkinsfile` so it starts gating again. | a green api37 row in the emulator matrix |
 

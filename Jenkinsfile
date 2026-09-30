@@ -294,9 +294,16 @@ node {
             # Installing in that window fails with "device is still booting" or
             # "Can't find service: package". So also require the services the
             # test run needs to actually answer.
+            #
+            # And require the device to be "device" in adb's own listing, not
+            # merely present. adb reports a booting emulator as "offline" while
+            # it is still coming up, and Gradle skips offline devices without
+            # failing, so a level gated only on the properties above can be
+            # silently skipped and still counted as run.
             booted=0
             for _ in \$(seq 1 120); do
-              if [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ] \\
+              if "\$ADB" devices | awk '\$1 ~ /^emulator-/ && \$2 == "device"' | grep -q . \\
+                 && [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ] \\
                  && "\$ADB" shell 'service check activity' 2>/dev/null | grep -q found \\
                  && "\$ADB" shell 'service check package' 2>/dev/null | grep -q found; then
                 booted=1
@@ -399,12 +406,29 @@ node {
             # the console port.
             "\$ADB" emu kill > /dev/null 2>&1 || true
             kill "\$EMU_PID" > /dev/null 2>&1 || true
+            torn_down=0
             for _ in \$(seq 1 30); do
               if [ -z "\$("\$ADB" devices | awk '\$1 ~ /^emulator-/' || true)" ]; then
+                torn_down=1
                 break
               fi
               sleep 2
             done
+
+            # Do not fall through on a failed teardown. A surviving emulator
+            # stays in adb's device list, and connectedAndroidTest runs against
+            # everything attached, so the next level would boot a second AVD
+            # alongside it and Gradle would run that level's suite against the
+            # OLD device. api37 was reported green on a run where it never
+            # executed a test: the stale api36 emulator was still attached, the
+            # new api37 came up offline and was skipped, and the suite ran
+            # against api36 instead. That is a false pass on a level the build
+            # is supposed to be gating, so fail here rather than report it.
+            if [ "\$torn_down" != '1' ]; then
+              echo "\$AVD did not shut down; refusing to run the next level" >&2
+              "\$ADB" devices >&2 || true
+              exit 1
+            fi
           done
 
           echo "emulator matrix -- tested:[\$ran] skipped:[\$skipped] failed:[\$failed] known-failing:[\$known_failed]"

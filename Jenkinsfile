@@ -179,17 +179,28 @@ node {
     // without these credentials should still get a build -- with the release
     // variant falling back to the debug key, which is what it did until now --
     // rather than a red pipeline over a missing secret. Anything that leaves
-    // the material present but wrong does not get swallowed: a bad password
-    // fails assembleRelease loudly a stage later, which is the right place for
-    // it. `set -u` without `-e` so a failed decode lands in this catch and says
-    // so, rather than continuing past it.
+    // the material present but wrong does get swallowed by the catch, so the
+    // flag below rethrows it: the distinction that matters is not "did the
+    // stage work" but "was there anything to work with". Credentials absent is
+    // a fork without secrets and gets a warning; credentials present but
+    // unusable fails the build, because quietly falling back there would
+    // publish an artifact signed by the wrong key while looking green.
+    def credentialsPresent = false
     try {
       withCredentials([
         string(credentialsId: 'hotdeath-release-jks', variable: 'HOTDEATH_JKS_B64'),
         string(credentialsId: 'hotdeath-release-signing', variable: 'HOTDEATH_SIGNING'),
       ]) {
-        sh """
-          set -u
+        credentialsPresent = true
+        // Single-quoted, so Groovy interpolates nothing here. Every variable in
+        // this block is the shell's, and the previous triple-double-quoted
+        // version had to escape each one as a backslash-dollar -- which build
+        // #49 caught by parsing the two unescaped $( command substitutions as
+        // Groovy. There is nothing to interpolate, so the escaping is not
+        // needed in the first place. Written this way, a command substitution
+        // cannot be mistaken for a GString by accident.
+        sh '''
+          set -eu
           # Pre-clean, so a previous run's material can never be picked up: the
           # checkout's clean-before-checkout is not pinned in this job's config.
           rm -f app/keystore/keystore.properties app/keystore/hotdeath-release.jks
@@ -197,24 +208,36 @@ node {
           # Report the shape of what arrived before decoding it, because
           # `base64: invalid input` on its own says nothing useful. Three facts
           # that between them localise the fault: the length, its remainder mod
-          # 4 (a valid base64 blob is always a multiple of 4, so a stray
-          # character shows up here and nowhere else), and how many characters
-          # are not in the alphabet at all -- which distinguishes a mangled
-          # paste from a credential holding a path or a command. Counts only,
-          # never the value.
-          B64_LEN=$(printf '%s' "\$HOTDEATH_JKS_B64" | tr -d '\\n\\r' | wc -c)
-          B64_BAD=$(printf '%s' "\$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c)
-          echo "keystore credential: \${B64_LEN} base64 characters, \$(( B64_LEN % 4 )) mod 4 (must be 0), \${B64_BAD} outside the alphabet"
-          # -d accepts both wrapped and unwrapped base64, so the credential can
-          # hold either without this caring.
-          printf '%s' "\$HOTDEATH_JKS_B64" | base64 -d > app/keystore/hotdeath-release.jks
+          # 4, and how many characters are not in the alphabet at all -- which
+          # distinguishes a mangled paste from a credential holding a path or a
+          # command. Counts only, never the value.
+          #
+          # On the remainder: 0 means padded, 2 and 3 are both legitimate final
+          # groups, and only 1 is impossible -- the last group of a base64
+          # encoding can hold 2, 3 or 4 characters and never 1. Build #48 hit
+          # exactly that, with 5801 characters, so the one number worth printing
+          # is the one that can only mean a broken value.
+          B64_LEN=$(printf '%s' "$HOTDEATH_JKS_B64" | tr -d '\\n\\r' | wc -c)
+          B64_BAD=$(printf '%s' "$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c)
+          echo "keystore credential: ${B64_LEN} base64 characters, $(( B64_LEN % 4 )) mod 4 (0 padded, 2 or 3 unpadded, 1 impossible), ${B64_BAD} outside the alphabet"
+          # -d accepts wrapped, unwrapped and unpadded base64, so the credential
+          # can hold any of the three. Empty is called out separately, because
+          # empty base64 decodes to an empty file without complaint and then
+          # surfaces much later as an opaque Gradle keystore error.
+          if [ -z "$HOTDEATH_JKS_B64" ] || ! printf '%s' "$HOTDEATH_JKS_B64" | base64 -d > app/keystore/hotdeath-release.jks; then
+            echo 'ERROR: the keystore credential did not decode to a keystore -- the line above is why'
+            exit 1
+          fi
           chmod 600 app/keystore/hotdeath-release.jks
-          printf '%s\n' "\$HOTDEATH_SIGNING" > app/keystore/keystore.properties
+          printf '%s\n' "$HOTDEATH_SIGNING" > app/keystore/keystore.properties
           chmod 600 app/keystore/keystore.properties
-        """
+        '''
       }
     } catch (err) {
-      echo 'WARNING: no usable signing credentials -- the release APK will be debug-signed'
+      if (credentialsPresent) {
+        throw err
+      }
+      echo 'WARNING: no signing credentials on this controller -- the release APK will be debug-signed'
     }
   }
 

@@ -2,6 +2,8 @@
 
 Java-to-Kotlin migration.
 
+**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. Six of the eight app classes referenced here — `Card`, `CardDeck`, `ComputerPlayer`, `Game`, `Hand`, `Player` — are now `.kt`, and every line number in them has moved, so grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical. `CardImageAdapter` and `GameTable` are still Java, so their references are still live.
+
 | Stage | Work | Verifiable by |
 | --- | --- | --- |
 | ~~0~~ | ~~Add Kotlin plugin to `app/build.gradle` only, no source changes~~ | ~~one CI compile~~ |
@@ -9,7 +11,7 @@ Java-to-Kotlin migration.
 | ~~2~~ | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand) — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM.~~ | ~~build #43: 114/114 passed, full pipeline green~~ |
 | ~~3~~ | ~~Convert leaf classes mechanically~~ — `Card`, `CardDeck`, `CardPile`, `Penalty`, `GameOptions` are Kotlin. `Hand` was recorded here as unable to be converted, because it calls the package-private `Game.checkCard` and "Kotlin cannot see a Java package-private member from another file". **That was wrong, and stage 4 converted it** — see the section below. | ~~build #60: 164/164 passed, full pipeline green~~ |
 | ~~4~~ | ~~`Player` hierarchy → `Game`~~ — `Player`, `HumanPlayer`, `ComputerPlayer`, `Hand` and `Game` are all Kotlin. Every class that is not an Android view is Kotlin now; the six files still in Java are exactly stage 5's list. Two visibility widenings were forced (`Player.drawCard`, `Game.checkCard`) because Kotlin has no package-private and `internal` mangles the JVM name. Nullability is the part that would have shipped as a runtime failure. Detail below. | ~~build #63: 164/164 passed, full pipeline green~~ |
-| 5 | Android UI last (GameActivity, GameTable, Main, Prefs) | manual on-device |
+| 5 | Android UI last — the six remaining Java files: `GameTable`, `GameActivity`, `Main`, `Prefs`, `CardImageAdapter`, `TapDismissableDialog` | manual on-device |
 | 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
@@ -50,15 +52,13 @@ The rest of `Game`'s old package-private members are `internal`, which keeps the
 
 **One thing invisible in review, and worth keeping.** `ComputerPlayer.computeColorBalance` averages the four suit counts with *integer* division and only then widens: a five-card hand averages 1, not 1.25. Kotlin refuses to widen an `Int` into a `Double` implicitly, so the intermediate is now spelled out as its own `val` and then `.toDouble()`d. Writing `/ 4.0` there is what a tidy-up would look like, and it would change every colour-balance score the Expert AI weighs at `m_skill >= 2`.
 
-Kotlin's `==` calls `equals()` where Java's `==` is identity. None of these classes overrides `equals`, checked across every source file, so the reference comparisons in `sortHand`, `advanceRound` and `getNextPlayer` mean the same thing they used to.
-
 ### How Game.kt was checked before it had a test
 
-`Game.kt` was written before any of this could run it, so it was checked structurally against the Java it replaced — 73 of 73 methods carried over, the sequence of `R.string` references **identical** at 47 of 47, the sequence of `Card.ID_*` references **identical** at 254 of 254, and every `m_*` assignment accounted for, the only differences being five fields that moved to Kotlin declaration-site initialisers and three the Java wrote in a constructor. Kotlin's `==` calls `equals()` where Java's `==` is identity, and no class here overrides `equals`, checked across every source file, so the reference comparisons still mean what they meant.
+`Game.kt` was written before any of this could run it, so it was checked structurally against the Java it replaced — 73 of 73 methods carried over, the sequence of `R.string` references **identical** at 47 of 47, the sequence of `Card.ID_*` references **identical** at 254 of 254, and every `m_*` assignment accounted for, the only differences being five fields that moved to Kotlin declaration-site initialisers and three the Java wrote in a constructor. Kotlin's `==` calls `equals()` where Java's `==` is identity, and no class overrides `equals` — checked across every source file — so the reference comparisons in `sortHand`, `advanceRound` and `getNextPlayer` still mean what they meant.
 
 That argued nothing was dropped. It is not the same as playing a game, which is what the next section is about.
 
-### Driving the round loop, and the bug that was not one
+## Driving the round loop, and the bug that was not one
 
 `GameRoundLoopTest` runs `startGame` then `advanceRound` to a finish, twice — once on house rules, once on standard rules — plus a check that standard rules deal seven each. It is the first thing in the suite that reaches `dealHands`, `advanceRound`, `handleSpecialCards`, `assessPenalty`, `calculateScore`, `sortHand` and `finishRound`: everything `HandPlayabilityTest` could only reach by setting `m_currCard`, `m_currColor` and `m_penalty` by reflection, because the code that sets them properly is `startRound`, which deals and draws off the top.
 
@@ -74,10 +74,7 @@ The fix is `buildActivity(...).get()` instead of `setup()`, so `onCreate` never 
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| ~~Cover the round loop~~ | ~~`GameRoundLoopTest`: two rounds driven to a finish on each ruleset, plus the standard-rules deal of seven. Asserts card conservation, hands revealed at round end, the winner becoming the dealer, and scores that only rise. Random deal, so invariant-only.~~ | build #64: 140 unit + 27 instrumented, 167 passed |
-
-
-The card table itself was generated from the old `CardDeck.java` rather than retyped: 648 `new Card(...)` lines, and a card's `deckIndex` *is* its position, which saved games store. Getting that table wrong would not fail a build or a test, it would invalidate saved games and silently deal a different deck. So the four variants were dumped to text under both implementations and diffed: same cards, same order, same indices, same multipliers, same `getCard` lookups.
+| ~~Cover the round loop~~ | ~~`GameRoundLoopTest`: two rounds driven to a finish on each ruleset, plus the standard-rules deal of seven. Asserts card conservation, hands revealed at round end, the winner becoming the dealer, and scores that only rise. Random deal, so invariant-only.~~ | build #65: 140 unit + 27 instrumented, 167 passed |
 
 ## Bugs the unit tests found
 
@@ -132,7 +129,9 @@ The regression test it needed is `JsonRoundTripTest.aFractionalMultiplierSurvive
 
 Neither is fixed. Both are recorded because writing the tests meant reading the code around them, and neither is reachable from a test that asserts current behaviour — one of them *is* current behaviour.
 
-**A virus infection is charged again in every round for the rest of the game.** `Hand.calculateValue` adds 10 to the owner's penalty per AIDS card on a final score (`Hand.java:391`), and that accumulation is correct — two cards, two infections. The compounding is one level up, in `Game.calculateScore`: it adds the player's *whole* `getVirusPenalty()` to their total score every round (`Game.java:1387` and `:1390`), but nothing clears that field between rounds. `Player.resetRound` (`Player.java:197`) does not touch `m_virusPenalty`; only `resetGame` (`Player.java:216`) does, and that runs once per game, not per round. So a player who picks up the green 3 in round 1 pays 10 again in round 2 with no green 3 in sight, again in round 3, and the running total grows by the whole accumulated penalty each time. The round winner is exempt (`Game.java:1383`), which is the one hint this was not meant to compound. The new test pins the accumulation at the `Hand` level, which is correct and is *not* the bug; the bug is the round loop, which needs a whole game to exercise.
+**A virus infection is charged again in every round for the rest of the game.** `Hand.calculateValue` adds 10 to the owner's penalty per AIDS card on a final score (`Hand.java:391`), and that accumulation is correct — two cards, two infections. The compounding is one level up, in `Game.calculateScore`: it adds the player's *whole* `getVirusPenalty()` to their total score every round (`Game.java:1387` and `:1390`), but nothing clears that field between rounds. `Player.resetRound` (`Player.java:197`) does not touch `m_virusPenalty`; only `resetGame` (`Player.java:216`) does, and that runs once per game, not per round. So a player who picks up the green 3 in round 1 pays 10 again in round 2 with no green 3 in sight, again in round 3, and the running total grows by the whole accumulated penalty each time. The round winner is exempt (`Game.java:1383`), which is the one hint this was not meant to compound. The `Hand`-level test pins the accumulation, which is correct and is *not* the bug; the bug is the round loop.
+
+**This one is now reachable, and that changes what fixing it takes.** When it was written, the round loop had no test at all, so the excuse was that seeing the compounding needed a whole game. `GameRoundLoopTest` now plays two rounds of one game, which is exactly that shape. So this is no longer blocked on reachability — it is blocked on nobody having written the assertion, which is a much smaller thing. `checkScores` deliberately does *not* catch it: it asserts only that a total is never below this round's score and never negative, which the compounding satisfies. A test that caught it would want a hand of no cards, a known `m_virusPenalty`, and two `startRound` calls with the field left alone — or simply a player holding the green 3 in round 1 and nothing in round 2, whose total should not have moved.
 
 **A malformed gamestate leaves `Game` half-built, silently.** The `catch (JSONException)` in the resuming constructor (`Game.java:280`) is empty, so a saved game missing any one key returns without a word: `m_penalty` is still null, `m_currCard` still null, and the first `checkCard` dereferences `m_penalty` unguarded at `Game.java:1117`. Nothing in the app should reach that — `startRound` assigns a fresh `Penalty` (`Game.java:713`) and the constructor does too once the JSON parses — so this is a bad save file or a future refactor rather than a live bug. Worth a log line either way, because "the game resumed" and "the game half-resumed and will crash on the first card played" look identical from outside.
 

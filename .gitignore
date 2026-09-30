@@ -21,12 +21,16 @@ proguard/
 # Local configuration -- contains an absolute SDK path, machine-specific
 local.properties
 
-# Local CI helper. The Jenkinsfile is tracked; this is a personal client with a
-# hardcoded controller URL, so it stays local. jenkins-creds.xml holds the API
-# token as a DPAPI-encrypted PSCredential -- it must never be committed, and DPAPI
-# ties it to this user on this machine anyway.
+# Local CI helper. The Jenkinsfile and jenkins.sh are tracked; this is the
+# PowerShell predecessor of jenkins.sh and it stays local. jenkins-creds.xml
+# held the API token as a DPAPI-encrypted PSCredential -- it must never be
+# committed, and DPAPI ties it to this user on this machine anyway. jenkins.sh
+# is tracked because its controller URL is only a default that the environment
+# or the creds file overrides, but jenkins-creds holds a plain API token, so
+# that one must never be committed either.
 /jenkins.ps1
 /jenkins-creds.xml
+/jenkins-creds
 
 # Signing material. These must never be committed.
 *.jks

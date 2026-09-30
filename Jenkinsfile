@@ -401,8 +401,17 @@ node {
                 "\$ADB" shell am start -W -n com.smccloud.hotdeath/.Main 2>&1
                 echo
                 echo "--- platform refusals ---"
+                # Exceptions, not just their call frames. A grep for the service
+                # names catches the tail of a stack trace but drops the
+                # exception and message above it, which is the part that says
+                # why the install was refused.
                 "\$ADB" logcat -d -v brief 2>&1 \\
-                  | grep -iE 'ActivityManager|ActivityTaskManager|PackageManager|hotdeath' \\
+                  | grep -iE 'ActivityManager|ActivityTaskManager|PackageManager|SystemServiceRegistry|hotdeath' \\
+                  | tail -80
+                echo
+                echo "--- crashes and low-memory kills ---"
+                "\$ADB" logcat -d -v brief 2>&1 \\
+                  | grep -iE 'FATAL|AndroidRuntime|watchdog|lowmemorykiller|kswapd|Out of memory|oom' \\
                   | tail -40
               } > "\$DIAG/report.txt" 2>&1 || true
               echo "\$AVD: wrote \$DIAG/report.txt" >&2

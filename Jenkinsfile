@@ -249,19 +249,25 @@ node {
           # swallows the rest, so Gradle would find no passwords at all and fail
           # inside R8. Normalise both shapes to newline-separated pairs, splitting
           # only on the four known key names -- never on a bare '=' -- so a
-          # password containing an equals sign cannot be cut in half. The trailing
-          # whitespace strip is not cosmetic: the spaces that separated the pairs
-          # land at the end of every value, and Properties.load() trims leading
-          # whitespace but keeps trailing, so storeFile would miss its file and
-          # the password would simply be wrong. A password with a deliberate
-          # trailing space is therefore not supported. The whitespace strip has
-          # to be a separate sed pass: in the pass that inserts the newlines, `$`
-          # anchors to the end of the whole pattern space rather than to each
-          # line, so it would only ever reach the last pair.
+          # password containing an equals sign cannot be cut in half. The \\n is
+          # doubled because Groovy unescapes it inside these triple single
+          # quotes: written once, it reached sed as a real newline and split the
+          # expression across lines, which sed rejected as an unterminated s
+          # command.
+          #
+          # The trailing whitespace strip is not cosmetic: the spaces that
+          # separated the pairs land at the end of every value, and
+          # Properties.load() trims leading whitespace but keeps trailing, so
+          # storeFile would miss its file and the password would simply be
+          # wrong. A password with a deliberate trailing space is therefore not
+          # supported. That strip has to be its own sed pass: in the pass that
+          # inserts the newlines, `$` anchors to the end of the whole pattern
+          # space rather than to each line, so it would only ever reach the last
+          # pair.
           RAW_PROPS=app/keystore/.signing.raw
           printf '%s\n' "$HOTDEATH_SIGNING" > "$RAW_PROPS"
           chmod 600 "$RAW_PROPS"
-          tr -d '\r' < "$RAW_PROPS" | sed -e 's/storeFile=/\nstoreFile=/' -e 's/storePassword=/\nstorePassword=/' -e 's/keyAlias=/\nkeyAlias=/' -e 's/keyPassword=/\nkeyPassword=/' | sed -e 's/[[:space:]]*$//' -e '/^$/d' > app/keystore/keystore.properties
+          tr -d '\\r' < "$RAW_PROPS" | sed -e 's/storeFile=/\\nstoreFile=/' -e 's/storePassword=/\\nstorePassword=/' -e 's/keyAlias=/\\nkeyAlias=/' -e 's/keyPassword=/\\nkeyPassword=/' | sed -e 's/[[:space:]]*$//' -e '/^$/d' > app/keystore/keystore.properties
           rm -f "$RAW_PROPS"
           chmod 600 app/keystore/keystore.properties
           # Name the keys that are missing. Never their values, and never any

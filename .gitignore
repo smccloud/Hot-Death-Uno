@@ -35,6 +35,15 @@ local.properties
 # Signing material. These must never be committed.
 *.jks
 *.keystore
+# The properties file next to them: four plaintext passwords. It has no
+# extension, so neither rule above covers it, and it looks like ordinary
+# configuration -- which is what makes it the one most likely to be committed by
+# accident. Unanchored, because it lives in the Gradle module at
+# com.smccloud.hotdeath/app/, not at the repo root.
+keystore.properties
+# Android Studio's "export signing config" writes an encrypted copy beside the
+# key. Same secrets, different extension.
+*.properties.asc
 
 # IDE
 .idea/

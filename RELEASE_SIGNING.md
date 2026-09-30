@@ -59,13 +59,22 @@ Keep the alias (`hotdeath`) — it is referenced in `keystore.properties` below.
 `.gitignore` already ignores `*.jks` and `*.keystore`, so the key file is covered.
 `keystore.properties` is not: it has no extension, so neither rule matches it, and
 it is the file most likely to be committed by accident because it looks like
-configuration. Add:
+ordinary configuration. Add to the existing "Signing material" block:
 
 ```gitignore
-# Release signing properties: four secrets, no extension, so the *.jks rule
-# above does not cover it.
-/keystore.properties
+keystore.properties
 *.properties.asc
+```
+
+**Unanchored, deliberately.** The properties file lives in the Gradle module at
+`com.smccloud.hotdeath/app/`, not at the repo root, so a leading slash —
+`/keystore.properties` — would match nothing that matters and leave four
+plaintext passwords tracked. `.gitignore` already has a note about this trap for
+the build-output patterns; the same reasoning applies here. Verify before you
+trust it:
+
+```bash
+git check-ignore -v com.smccloud.hotdeath/app/keystore.properties
 ```
 
 ## 3. Wire it into `app/build.gradle`

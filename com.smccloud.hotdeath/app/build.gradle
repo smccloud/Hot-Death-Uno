@@ -51,9 +51,14 @@ android {
         // when it does not. It has to move at all: 1.1.143 was published signed
         // with the debug key, and Android refuses to install a differently
         // signed build over the same versionCode.
-        versionCode 1002000
+        //
+        // 1.2.145 = 118 unit tests plus 27 instrumented, as build #58 runs them:
+        // the Shitter keeps its pseudo-value, and the two new tests are the
+        // F.U.-without-Quitter hand that used to fall through the bFullMonty skip
+        // and the guarantee that the pseudo-value never reaches a final score.
+        versionCode 1002145
 
-        versionName "1.2.0"
+        versionName "1.2.145"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

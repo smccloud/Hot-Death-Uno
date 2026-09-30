@@ -499,10 +499,10 @@ public class HandTest
 	}
 
 	/**
-	 * Step 10: mid-game only, the Shitter puts a floor under the total. Its
-	 * deck point value is 0, so Magic 5 is what can actually push a hand below
-	 * that floor -- without it the shitter's pseudo-value of 150 never
-	 * survives, because step 3 overwrites currentValue with the point value.
+	 * Step 10: mid-game only, the Shitter puts a floor under the total, and the
+	 * floor is the 150 from step 2. Magic 5 is the only card that can push a
+	 * hand below it, because step 3 now skips the Shitter and so leaves its
+	 * pseudo-value standing instead of overwriting it with the point value 0.
 	 */
 	@Test
 	public void shitterKeepsAMagicFiveHandOffTheFloor ()
@@ -511,23 +511,57 @@ public class HandTest
 		h.addCard (special (0, Card.ID_YELLOW_0_SHITTER, 0));
 		h.addCard (special (1, Card.ID_RED_5_MAGIC, -5));
 
-		assertEquals ("Magic 5 on its own would score this hand -5", 0, h.calculateValue());
+		assertEquals ("Magic 5 on its own would score this hand -5", 150, h.calculateValue());
 	}
 
 	/**
-	 * Documents the gap above: the shitter alone does not lift the total to the
-	 * 150 its pseudo-value suggests, because step 3 replaces that pseudo-value
-	 * with the card's real point value of 0.
+	 * A lone Shitter scores nothing in step 3, so step 10's floor is the whole
+	 * mid-game estimate: 150, and the card keeps the value the AI reads.
 	 */
 	@Test
-	public void shitterAloneDoesNotRaiseTheTotal ()
+	public void loneShitterLiftsTheTotalToItsPseudoValue ()
 	{
 		Hand h = new Hand(null);
 		Card shitter = special (0, Card.ID_YELLOW_0_SHITTER, 0);
 		h.addCard (shitter);
 
-		assertEquals (0, h.calculateValue());
-		assertEquals (0, shitter.getCurrentValue());
+		assertEquals (150, h.calculateValue());
+		assertEquals ("the pseudo-value is what ComputerPlayer reads", 150, shitter.getCurrentValue());
+	}
+
+	/**
+	 * A Shitter beside a F.U. but no Quitter is not a full monty, so it takes
+	 * the pseudo-value rather than the 500s. Step 8 doubles the total to 8,
+	 * and step 10 still floors it at 150.
+	 */
+	@Test
+	public void shitterSurvivesTheFuckYouDouble ()
+	{
+		Hand h = new Hand(null);
+		Card shitter = special (0, Card.ID_YELLOW_0_SHITTER, 0);
+		Card fuckYou = special (1, Card.ID_BLUE_0_FUCKYOU, 0);
+		h.addCard (shitter);
+		h.addCard (fuckYou);
+		h.addCard (number (Card.COLOR_GREEN, 4));
+
+		assertEquals (150, h.calculateValue());
+		assertEquals (150, shitter.getCurrentValue());
+		assertEquals ("the F.U. took the hand total before it was doubled", 4, fuckYou.getCurrentValue());
+	}
+
+	/**
+	 * The pseudo-value is a mid-game estimate and never a score: at the end of
+	 * a hand Game applies the real penalty, and step 10 skips the floor.
+	 */
+	@Test
+	public void shitterPseudoValueNeverReachesAFinalScore ()
+	{
+		Hand h = new Hand(null);
+		h.addCard (special (0, Card.ID_YELLOW_0_SHITTER, 0));
+		h.addCard (number (Card.COLOR_GREEN, 4));
+
+		assertEquals ("mid-game the floor applies", 150, h.calculateValue (false));
+		assertEquals ("a final score is Game's to apply", 4, h.calculateValue (true));
 	}
 
 	@Test

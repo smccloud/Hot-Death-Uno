@@ -339,6 +339,15 @@ public class Hand {
 			}
 		}
 
+		// ... and it has to survive step 3.  Step 3 ends every card it visits with
+		// that card's real point value, and the Shitter's is 0, so without this the
+		// 150 is gone before ComputerPlayer ever reads it.  Skipping the Shitter in
+		// step 3, the way the F.U. and Quitter are already skipped under bFullMonty,
+		// is what keeps it.  Re-applying 150 after the loop would work just as well,
+		// but it is the fragile half of the two: any later setCurrentValue added to
+		// step 3 would silently undo the repair.
+		boolean bShitterPseudoValue = (cShitter != null) && !bFullMonty;
+
 		// Step 3.  This is the Big Step...  Process all "fixed value" cards.  This 
 		// step includes ALL CARDS except Mystery Wild, Blue Shield, 69, Magic 5, 
 		// F.U., and Holy Def.  It SHOULD include the shitter and virus VALUES, but
@@ -362,6 +371,16 @@ public class Hand {
 				&& ((id == Card.ID_BLUE_0_FUCKYOU)
 				    || (id == Card.ID_YELLOW_0_SHITTER)
 					|| (id == Card.ID_GREEN_0_QUITTER))) 
+			{
+				continue;
+			}
+
+			// A lone Shitter (or a Shitter beside a F.U. with no Quitter, which
+			// does not make a full monty either) is not scored in step 3 for the
+			// same reason the three above are not: its pseudo-value from step 2
+			// stands, and step 10's floor is written against that value.
+			if (bShitterPseudoValue
+				&& (id == Card.ID_YELLOW_0_SHITTER))
 			{
 				continue;
 			}

@@ -220,6 +220,16 @@ node {
           # 37.2 rather than a bare 37, so the tag is spelled out per level
           # instead of being assumed from the API number.
           #
+          # api37 is on 37.2 rather than 37.0 because 37.0's google_apis image
+          # cannot commit a package install: the session commit needs the
+          # persistent_data_block service (Block Disk Assurance, published by
+          # vold) and that image does not publish it, so the installer dies
+          # mid-commit with "Broken pipe (32)". TODO.md has the trace.
+          #
+          # 37.1 and 37.2 exist only as _ps16k -- 16 KB page size, no plain
+          # google_apis build -- so the suffix is part of the tag. Emulator
+          # 37.1.11 on the controller supports 16 KB pages.
+          #
           # KNOWN_FAILING levels are still exercised -- they are how we find out
           # when the app starts working on a new platform -- but their results
           # are archived rather than published, so they do not fail the build.
@@ -230,11 +240,26 @@ node {
           skipped=''
           failed=''
           known_failed=''
-          for entry in 34:34 35:35 36:36 37:37.0; do
+          for entry in 34:34 35:35 36:36 37:37.2:google_apis_ps16k; do
             api="\${entry%%:*}"
-            tag="\${entry##*:}"
-            IMAGE="system-images;android-\$tag;google_apis;x86_64"
+            rest="\${entry#*:}"
+            tag="\${rest%%:*}"
+            flavour="\${rest#*:}"
+            # No third field means the ordinary google_apis image.
+            case "\$flavour" in
+              "\$tag") flavour=google_apis ;;
+            esac
+            IMAGE="system-images;android-\$tag;\$flavour;x86_64"
+            # The AVD name is the cache key for the created AVD, so an image swap
+            # has to change it. A bare "api37" from the 37.0 days is still on
+            # disk, and reusing it would boot the old image while reporting the
+            # new tag's results -- the worst way to test an image swap. Only
+            # non-default images get a qualified name, so 34-36 keep the AVDs
+            # they already have instead of paying to recreate them.
             AVD="api\$api"
+            if [ "\$tag\$flavour" != "\${api}google_apis" ]; then
+              AVD="api\$api-\$tag-\$flavour"
+            fi
 
             enforced=yes
             for k in \$KNOWN_FAILING; do

@@ -71,8 +71,8 @@ I/Watchdog: Pausing of HandlerChecker: monitor thread for reason:
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| Try a different 37 image | The fix is an image without the defect, not a change here. `system-images;android-37.0;default;x86_64` is the obvious candidate: the AOSP build ships no Google Play/vold extras, and the missing service is exactly the kind of thing a Google-added partition block is for. Change the tag in the matrix `for entry` line and rebuild. | the install commits on 37 and `MainLaunchTest` runs |
-| Check which 37 tags exist | 37.0/37.1/37.2 are all published. If 37.1 or 37.2 ships a working vold, that is a smaller change than switching to `default`. The matrix already spells the tag out per level for this reason. | a tag whose install commits |
-| If no image works | Then api37 is not testable on this controller and the honest end state is to drop it from the matrix, or leave it known-failing with a note pointing here. | a decision either way |
+| Try 37.2 (in progress) | api37 now runs `system-images;android-37.2;google_apis_ps16k;x86_64` instead of 37.0. Note 37.1 and 37.2 are published *only* as `_ps16k` — 16 KB page size — with no plain `google_apis` build, so 37.0 was the only 37.x image the old hardcoded `google_apis` flavour could select. Emulator 37.1.11 on the controller supports 16 KB pages. | the install commits on 37 and `MainLaunchTest` runs |
+| No AOSP fallback exists | `system-images;android-37.*;default;x86_64` is not published for any 37.x, so "try the AOSP image" is not available here. If 37.2 `_ps16k` still fails, the remaining options are 37.0 with a different flavour (`google_apis_playstore`, `google_apis_playstore_ps16k`) or accepting that 37 is not testable on this controller. | a tag whose install commits |
+| If no image works | Then api37 is not testable here and the honest end state is to drop it from the matrix, or leave it known-failing with a note pointing at this section. | a decision either way |
 | Promote back to enforced | Only after the install commits and `MainLaunchTest` passes. Remove `37` from `KNOWN_FAILING` in the `Jenkinsfile` so it starts gating again. | a green api37 row in the emulator matrix |
 

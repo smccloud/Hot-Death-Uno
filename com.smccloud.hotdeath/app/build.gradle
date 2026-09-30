@@ -52,13 +52,13 @@ android {
         // with the debug key, and Android refuses to install a differently
         // signed build over the same versionCode.
         //
-        // 1.2.145 = 118 unit tests plus 27 instrumented, as build #58 runs them:
-        // the Shitter keeps its pseudo-value, and the two new tests are the
-        // F.U.-without-Quitter hand that used to fall through the bFullMonty skip
-        // and the guarantee that the pseudo-value never reaches a final score.
-        versionCode 1002145
+        // 1.2.164 = 137 unit tests plus 27 instrumented, as build #59 runs them.
+        // Adds HandPlayabilityTest: hasValidCards and Game.checkCard, which
+        // needed a real Game, and the isfinal branch that charges the green 3
+        // to its owner's virus penalty.
+        versionCode 1002164
 
-        versionName "1.2.145"
+        versionName "1.2.164"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

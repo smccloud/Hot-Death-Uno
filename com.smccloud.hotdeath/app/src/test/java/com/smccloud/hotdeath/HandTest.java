@@ -15,10 +15,10 @@ import org.junit.Test;
  * bastard card changes the total in a way that is not visible from the card's
  * own point value -- so they are exercised one rule at a time.
  *
- * Plain JVM test. calculateValue is only reachable here because the tests below
- * avoid two paths that need a real context: Hand.hasValidCards hands off to
- * Game.checkCard, and the isfinal flag adds to Player.getVirusPenalty when a
- * hand holds the green 3.
+ * Plain JVM test. The two paths that need a real context live in
+ * HandPlayabilityTest instead: hasValidCards hands off to Game.checkCard, and
+ * the isfinal flag adds to Player.getVirusPenalty when a hand holds the
+ * green 3.
  */
 public class HandTest
 {

@@ -172,8 +172,16 @@ node {
   // file-credentials plugin on this controller, which is why the key arrives as
   // text rather than as withCredentials([file(...)]).
   //
-  // NOT inside dir(moduleDir): the paths have to land in the module directory,
-  // because that is where build.gradle's file('keystore.properties') looks.
+  // Inside dir(moduleDir), and that is not cosmetic. build.gradle reads
+  // file('keystore.properties'), which resolves against the app module's own
+  // directory, so the material has to land in com.smccloud.hotdeath/app/. The
+  // first version of this stage wrote app/keystore relative to the workspace
+  // root instead, which put a real keystore and a real plaintext password file
+  // somewhere Gradle never looks: build #50 went green, Gradle saw no
+  // keystore.properties, and packageRelease was UP-TO-DATE on the debug-signed
+  // APK from before any of this existed. Only the Signing report stage below
+  // caught it. Deriving the path from moduleDir instead of writing it out means
+  // it cannot disagree with the teardown stage again.
   stage('Signing material') {
     // Forgiving on purpose, and the catch is wide on purpose too. A fork
     // without these credentials should still get a build -- with the release
@@ -192,6 +200,7 @@ node {
         string(credentialsId: 'hotdeath-release-signing', variable: 'HOTDEATH_SIGNING'),
       ]) {
         credentialsPresent = true
+        dir(moduleDir) {
         // Single-quoted, so Groovy interpolates nothing here. Every variable in
         // this block is the shell's, and the previous triple-double-quoted
         // version had to escape each one as a backslash-dollar -- which build
@@ -201,6 +210,11 @@ node {
         // cannot be mistaken for a GString by accident.
         sh '''
           set -eu
+          # Remove the copy that #50 wrote to the wrong place before doing
+          # anything else, so a plaintext keystore and password file do not sit
+          # on the controller's disk for the life of the workspace. The repo has
+          # no root-level app/, so nothing here is ever checked out.
+          rm -rf ../../app/keystore
           # Pre-clean, so a previous run's material can never be picked up: the
           # checkout's clean-before-checkout is not pinned in this job's config.
           rm -f app/keystore/keystore.properties app/keystore/hotdeath-release.jks
@@ -231,7 +245,24 @@ node {
           chmod 600 app/keystore/hotdeath-release.jks
           printf '%s\n' "$HOTDEATH_SIGNING" > app/keystore/keystore.properties
           chmod 600 app/keystore/keystore.properties
+          # Check the keystore the properties point at actually exists, from the
+          # same directory Gradle resolves it against. Without this, a
+          # storeFile that does not match where this stage puts the key surfaces
+          # as a signing failure partway through R8, minutes later and after the
+          # expensive work.
+          STORE_FILE=$(sed -n 's/^[[:space:]]*storeFile[[:space:]]*=[[:space:]]*//p' app/keystore/keystore.properties | head -1)
+          case "$STORE_FILE" in
+            /*) RESOLVED_STORE="$STORE_FILE" ;;
+            *) RESOLVED_STORE="app/$STORE_FILE" ;;
+          esac
+          if [ ! -f "$RESOLVED_STORE" ]; then
+            echo "ERROR: keystore.properties says storeFile=$STORE_FILE, which resolves to $RESOLVED_STORE from the app module dir, and there is no file there"
+            echo '       A relative storeFile resolves against the app module dir, so it wants keystore/hotdeath-release.jks'
+            exit 1
+          fi
+          echo "keystore in use: $RESOLVED_STORE"
         '''
+        }
       }
     } catch (err) {
       if (credentialsPresent) {

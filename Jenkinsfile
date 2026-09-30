@@ -312,6 +312,51 @@ node {
             fi
             echo "\$AVD booted" >&2
 
+            # Before the test run, on a known-failing level, ask the device
+            # whether this platform can launch the app at all. Two reasons this
+            # has to happen here rather than after the test run:
+            # AGP uninstalls both APKs when the run finishes, so a probe
+            # afterwards reports "activity does not exist" for a package that
+            # was installed moments earlier -- which reads exactly like a
+            # platform problem and is nothing of the kind. And installing the
+            # app ourselves makes the answer independent of how the test task
+            # happens to package and push it.
+            if [ "\$enforced" = 'no' ]; then
+              DIAG="app/build/failure-diagnostics/\$AVD"
+              mkdir -p "\$DIAG"
+              APP_APK="app/build/outputs/apk/debug/app-debug.apk"
+              {
+                echo "=== \$AVD (API \$api): can this platform launch the app? ==="
+                echo
+                echo "--- install the app ---"
+                "\$ADB" install -r -t "\$APP_APK" 2>&1
+                echo
+                echo "--- installed? ---"
+                "\$ADB" shell pm path com.smccloud.hotdeath 2>&1
+                echo
+                echo "--- registered launcher entries for this package ---"
+                "\$ADB" shell cmd package query-activities \\
+                  -a android.intent.action.MAIN \\
+                  -c android.intent.category.LAUNCHER \\
+                  com.smccloud.hotdeath 2>&1 | head -20
+                echo
+                echo "--- can the platform resolve the launcher entry? ---"
+                "\$ADB" shell cmd package resolve-activity \\
+                  --brief -a android.intent.action.MAIN \\
+                  -c android.intent.category.LAUNCHER \\
+                  com.smccloud.hotdeath 2>&1
+                echo
+                echo "--- am start, by explicit component ---"
+                "\$ADB" shell am start -W -n com.smccloud.hotdeath/.Main 2>&1
+                echo
+                echo "--- platform refusals ---"
+                "\$ADB" logcat -d -v brief 2>&1 \\
+                  | grep -iE 'ActivityManager|ActivityTaskManager|PackageManager|hotdeath' \\
+                  | tail -40
+              } > "\$DIAG/report.txt" 2>&1 || true
+              echo "\$AVD: wrote \$DIAG/report.txt" >&2
+            fi
+
             # Run every API even if one fails, so a single build reports the
             # whole matrix instead of stopping at the first bad device. The
             # exit code is re-raised at the end.
@@ -328,46 +373,6 @@ node {
                 echo "recording it, and NOT failing the build" >&2
                 known_failed="\$known_failed \$AVD"
               fi
-
-              # Ask the device what it thinks, before killing it. A
-              # "Unable to resolve activity" failure is ambiguous on its own:
-              # the app may be absent, the activity may be unregistered, or
-              # the test harness may have built a component name in the wrong
-              # package. Only the device can tell those apart, and it is only
-              # reachable while the emulator is still up.
-              DIAG="app/build/failure-diagnostics/\$AVD"
-              mkdir -p "\$DIAG"
-              {
-                echo "=== \$AVD (API \$api) failure diagnostics ==="
-                echo
-                echo "--- installed? ---"
-                "\$ADB" shell pm path com.smccloud.hotdeath 2>&1
-                "\$ADB" shell pm path com.smccloud.hotdeath.test 2>&1
-                echo
-                echo "--- registered launcher activities ---"
-                "\$ADB" shell cmd package query-activities \\
-                  -a android.intent.action.MAIN \\
-                  -c android.intent.category.LAUNCHER 2>&1 | head -40
-                echo
-                echo "--- can the platform resolve Main? ---"
-                "\$ADB" shell cmd package resolve-activity \\
-                  --brief -a android.intent.action.MAIN \\
-                  -c android.intent.category.LAUNCHER \\
-                  com.smccloud.hotdeath 2>&1
-                echo
-                echo "--- am start, by explicit component ---"
-                "\$ADB" shell am start -W -n com.smccloud.hotdeath/.Main 2>&1
-                echo
-                echo "--- declared manifest activities ---"
-                "\$ADB" shell dumpsys package com.smccloud.hotdeath 2>&1 \\
-                  | grep -A4 -i 'Activity Resolver Table' | head -40
-                echo
-                echo "--- platform refusals ---"
-                "\$ADB" logcat -d -v brief 2>&1 \\
-                  | grep -iE 'ActivityManager|PackageManager|hotdeath' \\
-                  | tail -60
-              } > "\$DIAG/report.txt" 2>&1 || true
-              echo "\$AVD: wrote \$DIAG/report.txt" >&2
             fi
 
             # Keep this level's XML. AGP empties

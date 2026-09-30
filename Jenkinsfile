@@ -359,7 +359,28 @@ node {
               echo "\$AVD did not finish booting" >&2
               "\$ADB" devices >&2 || true
               tail -c 2000 "\$CACHE/emulator-\$AVD.log" >&2 || true
-              exit 1
+              # A level that never settles is the likeliest thing to need
+              # reading later, and this is the only place its device log
+              # still exists -- the run is ending, and the next boot wipes
+              # it. Goes to stderr so it lands in the console log, which
+              # survives a failed build; the archived report never gets
+              # written when we exit here.
+              echo "--- \$AVD: crashes and low-memory kills ---" >&2
+              "\$ADB" logcat -d -v brief 2>&1 \\
+                | grep -iE 'FATAL|AndroidRuntime|watchdog|lowmemorykiller|kswapd|Out of memory|oom|system_server.*(died|kill)|SystemServer' \\
+                | tail -60 >&2 || true
+              echo "--- \$AVD: end device log ---" >&2
+              # An enforced level that cannot boot must still fail the build.
+              # A known-failing one has already said it is not gating, and
+              # failing here costs us the other three levels' results -- a
+              # device that never settles is a known condition on api37, not
+              # a reason to stop reporting 34-36.
+              if [ "\$enforced" = 'yes' ]; then
+                exit 1
+              fi
+              echo "\$AVD never settled; recording as known-failing and moving on" >&2
+              known_failed="\$known_failed \$AVD"
+              continue
             fi
             echo "\$AVD booted" >&2
 

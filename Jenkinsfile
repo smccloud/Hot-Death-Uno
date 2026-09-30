@@ -300,14 +300,38 @@ node {
             # it is still coming up, and Gradle skips offline devices without
             # failing, so a level gated only on the properties above can be
             # silently skipped and still counted as run.
+            #
+            # None of that is enough on its own. The API 37 image restarts
+            # system_server during boot, and the gate above can pass against the
+            # outgoing instance: the properties are sticky, and service check
+            # answers for as long as the old instance is still bound. Proceeding
+            # then means installing into a system_server that is about to die.
+            # That is the "install-commit ... Broken pipe (32)" seen on api37,
+            # and it surfaces as a flaky install rather than as a boot failure,
+            # which is why it read as noise.
+            #
+            # So require the same answers twice, a gap apart, and require the
+            # system_server PID to be identical in both. A restart changes it.
             booted=0
             for _ in \$(seq 1 120); do
               if "\$ADB" devices | awk '\$1 ~ /^emulator-/ && \$2 == "device"' | grep -q . \\
                  && [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ] \\
                  && "\$ADB" shell 'service check activity' 2>/dev/null | grep -q found \\
                  && "\$ADB" shell 'service check package' 2>/dev/null | grep -q found; then
-                booted=1
-                break
+
+                # Same PID before and after the settle, and the services still
+                # answering at the end. One round is not enough: a restart in
+                # the gap is exactly what we are guarding against.
+                pid_a="\$("\$ADB" shell pidof system_server 2>/dev/null | tr -d '\\r\\n')"
+                sleep 10
+                pid_b="\$("\$ADB" shell pidof system_server 2>/dev/null | tr -d '\\r\\n')"
+                if [ -n "\$pid_a" ] && [ "\$pid_a" = "\$pid_b" ] \\
+                   && "\$ADB" shell 'service check package' 2>/dev/null | grep -q found; then
+                  booted=1
+                  echo "\$AVD settled: system_server pid \$pid_a held for 10s" >&2
+                  break
+                fi
+                echo "\$AVD still settling (system_server \$pid_a -> \$pid_b)" >&2
               fi
               sleep 3
             done

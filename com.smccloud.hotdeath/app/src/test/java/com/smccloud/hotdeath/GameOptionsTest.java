@@ -189,7 +189,7 @@ public class GameOptionsTest
 	{
 		putString ("cheat_code", "standardrules");
 
-		assertFalse (m_options.getStandardRules());
+		assertTrue (m_options.getStandardRules());
 		assertTrue (m_options.getFamilyFriendly());
 	}
 

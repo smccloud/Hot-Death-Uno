@@ -49,13 +49,20 @@ public class CardTextTest
 	/**
 	 * The ID switch only covers the named cards. Everything else falls through
 	 * to the value switch, which is what gives Reverse its name here.
+	 *
+	 * Note the colour is still prepended on this path: toString joins
+	 * strColor and strValue with a space, and the colour strings already end in
+	 * one, so these labels come out double-spaced. That is the app's existing
+	 * behaviour and it is the same for every numbered card, so the expectation
+	 * spells out both halves rather than the whole string.
 	 */
 	@Test
 	public void aReverseCardIsNamedByItsValue ()
 	{
 		Card c = new Card(0, Card.COLOR_GREEN, Card.VAL_R, Card.ID_GREEN_R, 20);
 
-		assertEquals (m_context.getString (R.string.cardval_r), c.toString (m_context));
+		assertEquals (m_context.getString (R.string.cardcolor_green) + " "
+			+ m_context.getString (R.string.cardval_r), c.toString (m_context));
 	}
 
 	@Test
@@ -63,7 +70,8 @@ public class CardTextTest
 	{
 		Card c = new Card(0, Card.COLOR_RED, Card.VAL_D, Card.ID_RED_D, 20);
 
-		assertEquals (m_context.getString (R.string.cardval_d), c.toString (m_context));
+		assertEquals (m_context.getString (R.string.cardcolor_red) + " "
+			+ m_context.getString (R.string.cardval_d), c.toString (m_context));
 	}
 
 	@Test

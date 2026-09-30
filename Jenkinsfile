@@ -248,6 +248,20 @@ node {
               echo no | "\$AVDMANAGER" create avd -f -n "\$AVD" -k "\$IMAGE" >&2
             fi
 
+            # Pin the data partition instead of trusting the image default. The
+            # Android 17 image ships an 800 MB partition, which pm refuses to
+            # install into: "Requested internal only, but not enough space".
+            # The older images default to 6 GB, which is known to fit the app
+            # and its test APK, so use that everywhere for a consistent matrix.
+            # -wipe-data below rebuilds userdata, so the new size takes effect.
+            DATA_PARTITION_BYTES=6442450944
+            CFG="\$AVDHOME/\$AVD.avd/config.ini"
+            if grep -q 'disk\.dataPartition\.size' "\$CFG"; then
+              sed -i '/^[[:space:]]*disk\.dataPartition\.size[[:space:]]*=/d' "\$CFG"
+              echo "enlarging data partition to \$DATA_PARTITION_BYTES bytes for \$AVD" >&2
+            fi
+            echo "disk.dataPartition.size=\$DATA_PARTITION_BYTES" >> "\$CFG"
+
             # -wipe-data keeps runs repeatable: the launch smoke test assumes
             # a fresh install with no saved game.
             "\$EMU" -avd "\$AVD" \\

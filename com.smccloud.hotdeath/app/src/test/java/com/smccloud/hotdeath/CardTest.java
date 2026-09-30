@@ -144,7 +144,7 @@ public class CardTest
 	 * exactly the kind of bug that would otherwise only show up mid-game.
 	 */
 	@Test
-	public void cardIdsAreAllDistinct ()
+	public void cardIdsAreAllDistinct () throws IllegalAccessException
 	{
 		Set<Integer> seen = new HashSet<Integer>();
 		int checked = 0;
@@ -166,7 +166,7 @@ public class CardTest
 
 	/** The same argument as cardIdsAreAllDistinct, for the VAL_ constants. */
 	@Test
-	public void cardValuesAreAllDistinct ()
+	public void cardValuesAreAllDistinct () throws IllegalAccessException
 	{
 		Set<Integer> seen = new HashSet<Integer>();
 

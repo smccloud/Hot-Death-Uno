@@ -33,6 +33,34 @@ node {
   def sdkHome
   def gradleHome
 
+  // Destroys the signing material, wherever it happens to be. Defined once and
+  // called at both ends of the run: the pre-clean and the teardown have to agree
+  // exactly about these paths, and #50 is what it costs when they do not
+  // disagree -- a real keystore and a real plaintext password file left on the
+  // controller for the life of the workspace, with the teardown removing a path
+  // that had never existed. Reads storeFile out of the properties file first,
+  // because the keystore's location is defined by it rather than by convention.
+  def removeSigningMaterial = {
+    dir(moduleDir) {
+      sh '''
+        set -u
+        rm -rf ../../app/keystore
+        STALE=$(sed -n 's/^storeFile=//p' app/keystore/keystore.properties 2>/dev/null | head -1 || true)
+        case "$STALE" in
+          '') ;;
+          /*) rm -f "$STALE" ;;
+          *) rm -f "app/$STALE" ;;
+        esac
+        rm -rf app/keystore
+        # Also sweep the module dir. The rm above only knows the path the current
+        # properties name, so a keystore left by a run whose storeFile was
+        # different would survive; nothing checked out ends in .jks, since every
+        # keystore is gitignored and CI-only, so this cannot eat anything real.
+        rm -f app/*.jks
+      '''
+    }
+  }
+
   stage('Checkout') {
     checkout scm
   }
@@ -200,6 +228,9 @@ node {
         string(credentialsId: 'hotdeath-release-signing', variable: 'HOTDEATH_SIGNING'),
       ]) {
         credentialsPresent = true
+        // Start from nothing before writing anything, and use the same closure
+        // the teardown uses so the two cannot drift apart again.
+        removeSigningMaterial()
         dir(moduleDir) {
         // Single-quoted, so Groovy interpolates nothing here. Every variable in
         // this block is the shell's, and the previous triple-double-quoted
@@ -210,60 +241,32 @@ node {
         // cannot be mistaken for a GString by accident.
         sh '''
           set -eu
-          # Remove the copy that #50 wrote to the wrong place before doing
-          # anything else, so a plaintext keystore and password file do not sit
-          # on the controller's disk for the life of the workspace. The repo has
-          # no root-level app/, so nothing here is ever checked out.
-          rm -rf ../../app/keystore
-          # Pre-clean, so a previous run's material can never be picked up: the
-          # checkout's clean-before-checkout is not pinned in this job's config.
-          rm -f app/keystore/keystore.properties app/keystore/hotdeath-release.jks
+          # A previous run's material can otherwise be picked up, because this
+          # job's SCM config does not pin clean-before-checkout.
           mkdir -p app/keystore
-          # Report the shape of what arrived before decoding it, because
-          # `base64: invalid input` on its own says nothing useful. Three facts
-          # that between them localise the fault: the length, its remainder mod
-          # 4, and how many characters are not in the alphabet at all -- which
-          # distinguishes a mangled paste from a credential holding a path or a
-          # command. Counts only, never the value.
+          # Properties first, keystore second. The other order looked natural and
+          # was wrong: the keystore has to land at whatever path storeFile names,
+          # and storeFile is not known until the blob is parsed.
           #
-          # On the remainder: 0 means padded, 2 and 3 are both legitimate final
-          # groups, and only 1 is impossible -- the last group of a base64
-          # encoding can hold 2, 3 or 4 characters and never 1. Build #48 hit
-          # exactly that, with 5801 characters, so the one number worth printing
-          # is the one that can only mean a broken value.
-          B64_LEN=$(printf '%s' "$HOTDEATH_JKS_B64" | tr -d '\\n\\r' | wc -c)
-          B64_BAD=$(printf '%s' "$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c)
-          echo "keystore credential: ${B64_LEN} base64 characters, $(( B64_LEN % 4 )) mod 4 (0 padded, 2 or 3 unpadded, 1 impossible), ${B64_BAD} outside the alphabet"
-          # -d accepts wrapped, unwrapped and unpadded base64, so the credential
-          # can hold any of the three. Empty is called out separately, because
-          # empty base64 decodes to an empty file without complaint and then
-          # surfaces much later as an opaque Gradle keystore error.
-          if [ -z "$HOTDEATH_JKS_B64" ] || ! printf '%s' "$HOTDEATH_JKS_B64" | base64 -d > app/keystore/hotdeath-release.jks; then
-            echo 'ERROR: the keystore credential did not decode to a keystore -- the line above is why'
-            exit 1
-          fi
-          chmod 600 app/keystore/hotdeath-release.jks
-          # The signing credential is a properties blob that Jenkins hands over as
-          # one string, and it is easy to create it as a single space-separated
-          # line. Properties.load() reads that as a single key whose value
-          # swallows the rest, so Gradle would find no passwords at all and fail
-          # inside R8. Normalise both shapes to newline-separated pairs, splitting
-          # only on the four known key names -- never on a bare '=' -- so a
-          # password containing an equals sign cannot be cut in half. The \\n is
-          # doubled because Groovy unescapes it inside these triple single
-          # quotes: written once, it reached sed as a real newline and split the
-          # expression across lines, which sed rejected as an unterminated s
-          # command.
+          # The blob arrives as one string, and it is easy to create it as a
+          # single space-separated line. Properties.load() reads that as one key
+          # whose value swallows the rest, so Gradle would find no passwords at
+          # all and fail inside R8. Normalise both shapes to newline-separated
+          # pairs, splitting only on the four known key names -- never on a bare
+          # '=' -- so a password containing an equals sign cannot be cut in half.
+          # The \\n is doubled because Groovy unescapes it inside these triple
+          # single quotes: written once, it reached sed as a real newline and
+          # split the expression across lines, which sed called an unterminated
+          # s command.
           #
           # The trailing whitespace strip is not cosmetic: the spaces that
           # separated the pairs land at the end of every value, and
           # Properties.load() trims leading whitespace but keeps trailing, so
-          # storeFile would miss its file and the password would simply be
-          # wrong. A password with a deliberate trailing space is therefore not
-          # supported. That strip has to be its own sed pass: in the pass that
-          # inserts the newlines, `$` anchors to the end of the whole pattern
-          # space rather than to each line, so it would only ever reach the last
-          # pair.
+          # storeFile would miss its file and the password would simply be wrong
+          # -- a failure pointing nowhere near the cause. That strip is a separate
+          # sed pass because in the pass that inserts the newlines, `$` anchors to
+          # the end of the whole pattern space rather than to each line, so it
+          # would only ever reach the last pair.
           RAW_PROPS=app/keystore/.signing.raw
           printf '%s\n' "$HOTDEATH_SIGNING" > "$RAW_PROPS"
           chmod 600 "$RAW_PROPS"
@@ -274,7 +277,7 @@ node {
           # fragment of the credential: build #51 printed the whole blob into
           # the console log by echoing a value cut out of it, and Jenkins' log
           # masking only covers the exact secret text, so a fragment slips past
-          # it. Nothing derived from this credential gets echoed from here on.
+          # it. Nothing derived from that credential is echoed from here on.
           MISSING=
           for KEY in storeFile storePassword keyAlias keyPassword; do
             grep -q "^${KEY}=" app/keystore/keystore.properties || MISSING="${MISSING} ${KEY}"
@@ -283,19 +286,47 @@ node {
             echo "ERROR: keystore.properties is missing:${MISSING}"
             exit 1
           fi
-          # Confirm the keystore the properties name is really there, resolved
-          # from the same directory Gradle resolves a relative storeFile against.
+          # Honour storeFile rather than imposing a path on it. build.gradle
+          # calls file(storeFile) from the app module, so a relative storeFile
+          # resolves against that directory -- and #53 is what insisting on
+          # app/keystore/hotdeath-release.jks instead looked like: the credential
+          # says hotdeath-release.jks, which is a perfectly good answer, and the
+          # stage refused it. Write the key where Gradle will look for it.
           STORE_FILE=$(sed -n 's/^storeFile=//p' app/keystore/keystore.properties | head -1)
           case "$STORE_FILE" in
             /*) RESOLVED_STORE="$STORE_FILE" ;;
             *) RESOLVED_STORE="app/$STORE_FILE" ;;
           esac
-          if [ ! -f "$RESOLVED_STORE" ]; then
-            echo "ERROR: the storeFile in keystore.properties does not name a file that exists"
-            echo '       A relative storeFile resolves against the app module dir, so it wants keystore/hotdeath-release.jks'
+          mkdir -p "$(dirname "$RESOLVED_STORE")"
+          # Report the shape of what arrived before decoding it, because
+          # `base64: invalid input` on its own says nothing useful. Three facts
+          # that between them localise the fault: the length, its remainder mod
+          # 4, and how many characters are not in the alphabet at all -- which
+          # distinguishes a mangled paste from a credential holding a path or a
+          # command. Counts only, never the value.
+          #
+          # On the remainder: 0 means padded, 2 and 3 are both legitimate final
+          # groups, and only 1 is impossible -- the last group can hold 2, 3 or 4
+          # characters and never 1. Build #48 hit exactly that, with 5801
+          # characters, so the one number worth printing is the one that can only
+          # mean a broken value.
+          B64_LEN=$(printf '%s' "$HOTDEATH_JKS_B64" | tr -d '\\n\\r' | wc -c)
+          B64_BAD=$(printf '%s' "$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c)
+          echo "keystore credential: ${B64_LEN} base64 characters, $(( B64_LEN % 4 )) mod 4 (0 padded, 2 or 3 unpadded, 1 impossible), ${B64_BAD} outside the alphabet"
+          # -d accepts wrapped, unwrapped and unpadded base64, so the credential
+          # can hold any of the three. Empty is called out separately, because
+          # empty base64 decodes to an empty file without complaint and then
+          # surfaces much later as an opaque Gradle keystore error.
+          if [ -z "$HOTDEATH_JKS_B64" ] || ! printf '%s' "$HOTDEATH_JKS_B64" | base64 -d > "$RESOLVED_STORE"; then
+            echo 'ERROR: the keystore credential did not decode to a keystore -- the line above is why'
             exit 1
           fi
-          echo 'keystore.properties: all four keys present, and the keystore it names exists'
+          chmod 600 "$RESOLVED_STORE"
+          if [ ! -s "$RESOLVED_STORE" ]; then
+            echo 'ERROR: the keystore decoded to nothing'
+            exit 1
+          fi
+          echo 'keystore.properties: all four keys present, and its keystore decoded and is not empty'
         '''
         }
       }
@@ -813,8 +844,6 @@ node {
   // residual risk is a failed build leaving the file on disk until the next run,
   // never a stale key being used.
   stage('Remove signing material') {
-    sh """
-      rm -f ${moduleDir}/app/keystore/keystore.properties ${moduleDir}/app/keystore/hotdeath-release.jks
-    """
+    removeSigningMaterial()
   }
 }

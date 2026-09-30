@@ -194,6 +194,11 @@ node {
           # checkout's clean-before-checkout is not pinned in this job's config.
           rm -f app/keystore/keystore.properties app/keystore/hotdeath-release.jks
           mkdir -p app/keystore
+          # Report the shape of what arrived before decoding it, because
+          # `base64: invalid input` on its own says nothing about whether the
+          # credential holds a truncated blob, a path, or a command. Counts and a
+          # character-class check only -- the value is never printed.
+          echo "keystore credential: \$(printf '%s' "\$HOTDEATH_JKS_B64" | wc -c) bytes, \$(printf '%s' "\$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c) outside the base64 alphabet"
           # -d accepts both wrapped and unwrapped base64, so the credential can
           # hold either without this caring.
           printf '%s' "\$HOTDEATH_JKS_B64" | base64 -d > app/keystore/hotdeath-release.jks

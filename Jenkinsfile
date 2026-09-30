@@ -272,9 +272,18 @@ node {
 
             # Poll for boot rather than sleeping a fixed amount: the first boot
             # of a fresh AVD is much slower than a warm one.
+            #
+            # sys.boot_completed on its own is not enough. It is a sticky
+            # property, so it stays 1 across a system_server restart -- and the
+            # API 37 image does restart it (start_count 3 on a fresh boot).
+            # Installing in that window fails with "device is still booting" or
+            # "Can't find service: package". So also require the services the
+            # test run needs to actually answer.
             booted=0
             for _ in \$(seq 1 120); do
-              if [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ]; then
+              if [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ] \\
+                 && "\$ADB" shell 'service check activity' 2>/dev/null | grep -q found \\
+                 && "\$ADB" shell 'service check package' 2>/dev/null | grep -q found; then
                 booted=1
                 break
               fi

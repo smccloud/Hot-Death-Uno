@@ -17,21 +17,27 @@ Java-to-Kotlin migration.
 
 ## Bugs the unit tests found
 
-Stage 2 turned up three defects in the app itself. **Two are fixed** — the double-spaced labels in build #44, the multiplier truncation in build #45, which is published as 1.1.143. The third is recorded rather than fixed: it changes behaviour, and finding it was what the stage was for.
+Stage 2 turned up three defects in the app itself. **All three are fixed** — the double-spaced labels in build #44, the multiplier truncation in build #45, which is published as 1.1.143, and the Shitter's lost pseudo-value in build #58. The last one was held back the longest because it changes behaviour rather than a string, and finding it was what the stage was for.
 
-The Shitter is pinned by `HandTest` asserting the **current** behaviour, so fixing it turns that class red on purpose, to stop the fix passing unnoticed.
+The Shitter was pinned by `HandTest` asserting the **current** behaviour, so fixing it turned that class red on purpose, to stop the fix passing unnoticed.
 
-Of the two that were visible to a player, one was cosmetic. The other was latent — it changed no score, and the section below says why.
+Of the three that were visible to a player, one was cosmetic and one was latent — it changed no score, and its section below says why. The third changed how the AI plays.
 
-### The Shitter's 150 is overwritten before anything reads it
+### The Shitter's 150 was overwritten before anything read it — fixed in build #58
 
-`Hand.calculateValue` step 2 (`Hand.java:338`) gives the Shitter a pseudo-value of 150 so "computer players will want to unload it ASAP". That is not dead code — `ComputerPlayer` reads `getCurrentValue()` twice when choosing a card to shed (`ComputerPlayer.java:208`, `ComputerPlayer.java:280`), and that path is live at skill 1 and above.
+`Hand.calculateValue` step 2 (`Hand.java:338`) gives the Shitter a pseudo-value of 150 so "computer players will want to unload it ASAP". That was never dead code — `ComputerPlayer` reads `getCurrentValue()` twice when choosing a card to shed (`ComputerPlayer.java:208`, `ComputerPlayer.java:280`), and that path is live at skill 1 and above.
 
-Step 3 then runs over every card and calls `c.setCurrentValue(pv)` (`Hand.java:418`), which resets the Shitter to its real point value of 0. So by the time the AI looks, the 150 is gone.
+Step 3 then ran over every card and called `c.setCurrentValue(pv)` (`Hand.java:437`), which reset the Shitter to its real point value of 0. So by the time the AI looked, the 150 was gone.
 
-The reason this looks deliberate at first is that the sibling cards are protected: step 3 skips the F.U., Shitter and Quitter together (`Hand.java:361-367`), so the F.U./Quitter 500s from step 2 *do* survive. But that skip is gated on `bFullMonty`, which only becomes true when the F.U. **and** Quitter are both in the hand. A Shitter on its own is not covered, and a Shitter alongside a F.U. but no Quitter is not covered either.
+The reason it looked deliberate at first is that the sibling cards were protected: step 3 skips the F.U., Shitter and Quitter together (`Hand.java:370-376`), so the F.U./Quitter 500s from step 2 *did* survive. But that skip is gated on `bFullMonty`, which only becomes true when the F.U. **and** Quitter are both in the hand. A Shitter on its own was not covered, and a Shitter alongside a F.U. but no Quitter was not covered either.
 
-Step 10's floor (`Hand.java:501`) then compares against that clobbered 0 instead of 150, so mid-game a Shitter hand can never score below 0 — where the intent was a floor of 150. `shitterAloneDoesNotRaiseTheTotal` and `shitterKeepsAMagicFiveHandOffTheFloor` in `HandTest` assert exactly this, and will need updating with the fix.
+Step 10's floor (`Hand.java:520`) then compared against that clobbered 0 instead of 150, so mid-game a Shitter hand could never score below 0 — where the intent was a floor of 150. `shitterAloneDoesNotRaiseTheTotal` and `shitterKeepsAMagicFiveHandOffTheFloor` in `HandTest` asserted exactly this.
+
+**The fix skips the Shitter in step 3 whenever step 2 gave it the pseudo-value**, the same way the three bastard cards are already skipped under `bFullMonty`, which is the second of the two options this table listed. The first — re-applying 150 after step 3 — works too, and was passed over because it is the fragile half of the two: the repair would be undone by any later `setCurrentValue` added to that loop, silently.
+
+**It changes no score, and no final score can move.** `total` is identical either way, because the Shitter's point value is 0 and step 3 was never what added the 150 to anything; the 150 only ever reached `total` through step 10's floor, which is already gated on `!isfinal`. `Game` applies the real penalty from the final scores and never reads `getCurrentValue()` at all. What did change is the two things that were actually broken: `ComputerPlayer` now sees 150 and sheds the card, and a mid-game estimate of a lone Shitter is 150 rather than 0.
+
+Two tests were added because the pair that had pinned the bug could not have caught half of it: `shitterSurvivesTheFuckYouDouble` covers the F.U.-without-Quitter hand, which fell through the skip and is the case most likely to be missed by a fix that only tests a lone card, and `shitterPseudoValueNeverReachesAFinalScore` asserts the same hand scores 150 mid-game and 4 finally, so the fix cannot be made to pass by letting the pseudo-value into a real score.
 
 ### Every card label was double-spaced — fixed in build #44
 
@@ -53,7 +59,7 @@ The regression test it needed is `JsonRoundTripTest.aFractionalMultiplierSurvive
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| Restore the Shitter's pseudo-value | Either re-apply 150 after step 3, or widen the `bFullMonty` skip to cover a lone Shitter. Then step 10's floor means what its comment says. Update the two `HandTest` cases that assert current behaviour. | score a hand holding a Shitter, and watch a Strong/Expert AI shed it |
+| ~~Restore the Shitter's pseudo-value~~ | ~~Skipped the Shitter in step 3 whenever step 2 gave it the 150, rather than re-applying it after the loop, so nothing can overwrite it a second time. Covers a lone Shitter and a Shitter beside a F.U. with no Quitter. `shitterAloneDoesNotRaiseTheTotal` became `loneShitterLiftsTheTotalToItsPseudoValue` and the Magic 5 case now expects 150; added `shitterSurvivesTheFuckYouDouble` and `shitterPseudoValueNeverReachesAFinalScore`.~~ | build #58: 118 unit + 27 instrumented, 145 passed; **watch a Strong/Expert AI shed the Shitter on-device — still unverified, and the one thing the tests cannot show** |
 | ~~Trim the double space~~ | ~~Dropped the join's own `" "` at `Card.java:307` and left the four `cardcolor_*` strings alone — the trailing space *is* the separator, and the colour picker plus `Game.colorToString` both still want it. Updated the five `CardTextTest` expectations and added the one that asserts on the rendered label.~~ | build #44: 115 unit + 27 instrumented, 142 passed, full pipeline green |
 | ~~Fix the multiplier round-trip~~ | ~~`getInt` → `getDouble` at `Card.java:322`, plus `aFractionalMultiplierSurvivesTheRoundTrip` covering 0.5, 0.25, 1.5 and 2.5.~~ | build #45: 116 unit + 27 instrumented, 143 passed; published as 1.1.143 |
 | Still uncovered | `Hand.hasValidCards` needs a real `Game` (it calls `checkCard`), and the `isfinal` branch adds to `Player.getVirusPenalty` for the green 3 (`Hand.java:372`). Both need a `Context`, so both are reachable under Robolectric. | `GameOptionsTest`-style activity |

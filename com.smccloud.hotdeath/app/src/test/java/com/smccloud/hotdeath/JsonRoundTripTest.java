@@ -63,6 +63,32 @@ public class JsonRoundTripTest
 		assertTrue (restored.getFaceUp());
 	}
 
+	/**
+	 * The only fractional multiplier in the app is the 0.5 Holy Defender
+	 * (CardDeck.java:66 and :183), and it used to come back as 0.0. Card's
+	 * JSONObject constructor read the field with getInt while toJSON writes it as
+	 * a double, and getInt truncates toward zero.
+	 *
+	 * Nothing reads the multiplier yet, so this changed no score -- it is a guard
+	 * for whenever something does. Any fraction truncates rather than just this
+	 * one, so the case runs across a spread of them instead of pinning the single
+	 * value the deck happens to use.
+	 */
+	@Test
+	public void aFractionalMultiplierSurvivesTheRoundTrip () throws Exception
+	{
+		double[] multipliers = { 0.5, 0.25, 1.5, 2.5 };
+
+		for (double multiplier : multipliers)
+		{
+			Card original = new Card(1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, multiplier);
+
+			Card restored = new Card(original.toJSON());
+
+			assertEquals (multiplier, restored.getPointMultiplier(), 0.0);
+		}
+	}
+
 	@Test
 	public void aFaceDownCardStaysFaceDown () throws Exception
 	{

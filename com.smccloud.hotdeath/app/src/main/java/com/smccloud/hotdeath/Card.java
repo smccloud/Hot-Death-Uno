@@ -316,7 +316,10 @@ public class Card {
 		m_value = o.getInt("value");
 		m_currentValue = o.getInt("currentValue");
 		m_pointValue = o.getInt("pointValue");
-		m_pointMultiplier = o.getInt("pointMultiplier");
+		// getDouble, not getInt: the field is a double, and toJSON writes it as
+		// one. getInt truncates toward zero, so the 0.5 Holy Defender resumed as
+		// 0.0.
+		m_pointMultiplier = o.getDouble("pointMultiplier");
 		m_cumulativePenalty = o.getInt("cumulativePenalty");
 		m_highestCardMatch = o.getInt("highestCardMatch");
 		m_id = o.getInt("id");

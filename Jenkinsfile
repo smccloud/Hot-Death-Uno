@@ -195,10 +195,16 @@ node {
           rm -f app/keystore/keystore.properties app/keystore/hotdeath-release.jks
           mkdir -p app/keystore
           # Report the shape of what arrived before decoding it, because
-          # `base64: invalid input` on its own says nothing about whether the
-          # credential holds a truncated blob, a path, or a command. Counts and a
-          # character-class check only -- the value is never printed.
-          echo "keystore credential: \$(printf '%s' "\$HOTDEATH_JKS_B64" | wc -c) bytes, \$(printf '%s' "\$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c) outside the base64 alphabet"
+          # `base64: invalid input` on its own says nothing useful. Three facts
+          # that between them localise the fault: the length, its remainder mod
+          # 4 (a valid base64 blob is always a multiple of 4, so a stray
+          # character shows up here and nowhere else), and how many characters
+          # are not in the alphabet at all -- which distinguishes a mangled
+          # paste from a credential holding a path or a command. Counts only,
+          # never the value.
+          B64_LEN=$(printf '%s' "\$HOTDEATH_JKS_B64" | tr -d '\\n\\r' | wc -c)
+          B64_BAD=$(printf '%s' "\$HOTDEATH_JKS_B64" | tr -d 'A-Za-z0-9+/=\\n\\r' | wc -c)
+          echo "keystore credential: \${B64_LEN} base64 characters, \$(( B64_LEN % 4 )) mod 4 (must be 0), \${B64_BAD} outside the alphabet"
           # -d accepts both wrapped and unwrapped base64, so the credential can
           # hold either without this caring.
           printf '%s' "\$HOTDEATH_JKS_B64" | base64 -d > app/keystore/hotdeath-release.jks

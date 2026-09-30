@@ -16,9 +16,9 @@ import org.junit.runner.RunWith;
  * the running total, and a stacked card must not overwrite the card that
  * started the penalty.
  *
- * Runs instrumented rather than as a JVM unit test only because the Player
- * references are stubbed out here; the JSON round-trip in other Penalty tests
- * needs a real org.json.
+ * Kept instrumented as the on-device check for this behaviour. The same class
+ * logic is also covered faster on the JVM in src/test: PenaltyTest for the
+ * penalty kinds and the card-count setter, JsonRoundTripTest for the JSON.
  */
 @RunWith(AndroidJUnit4.class)
 public class PenaltyStackTest

@@ -136,6 +136,12 @@ node {
 
   // AGP reads ANDROID_HOME, so local.properties is unnecessary -- which is what
   // we want, since it is gitignored and holds a machine-specific SDK path.
+  //
+  // The Robolectric tests here (GameOptions, Card.toString, the save/resume JSON
+  // round-trips) fetch an android-all-instrumented jar from Maven Central the
+  // first time they run, on top of the usual dependency resolution. If this
+  // controller ever needs to build without network access, prefetch that jar or
+  // switch Robolectric to its offline mode before tightening anything else.
   stage('Unit tests') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
@@ -160,9 +166,10 @@ node {
     }
   }
 
-  // Instrumented tests need a real Android runtime, which the JVM unit tests
-  // cannot stand in for: org.json is a stub there, and the launch smoke test
-  // needs a real Activity. So boot a headless AVD per API level and let Gradle
+  // Instrumented tests need a real Android runtime, which neither a plain JVM
+  // unit test nor Robolectric can stand in for: the launch smoke test
+  // inspects live widgets, and only an emulator exercises the game's own
+  // threading and timing. So boot a headless AVD per API level and let Gradle
   // drive it.
   //
   // The google_apis image is a full Google APIs build, which is closer to what

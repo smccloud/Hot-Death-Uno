@@ -21,10 +21,11 @@ android {
 
         versionName "1.0.12"
 
-        // Instrumented tests run against a real Android runtime, which the
-        // JVM unit tests cannot stand in for: org.json is a stub in unit tests
-        // (so Penalty's JSON round-trip throws there), and the launch smoke
-        // test needs a real Activity.
+        // The instrumented suite still needs a real runtime: MainLaunchTest
+        // launches an Activity and inspects live widgets. src/test covers the
+        // pure-logic classes instead. Some of those tests are plain JVM; the
+        // ones that touch SharedPreferences or R.string go through
+        // Robolectric, which gets the merged manifest from here.
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -43,6 +44,16 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric reads the merged AndroidManifest (to resolve
+            // GameActivity and its theme) and the compiled resources out of
+            // app/build/intermediates. Without this it cannot even build an
+            // Activity, so any RobolectricTestRunner test fails here first.
+            includeAndroidResources = true
+        }
+    }
 }
 
 // jvmTarget must match compileOptions exactly or the build fails with
@@ -60,10 +71,20 @@ kotlin {
     }
 }
 
-// androidTest only -- the app itself still has no third-party dependencies.
+// The app itself is framework-only; everything below is test-only.
+// androidTest needs the real device/emulator. src/test runs on the JVM, and
+// supplies org.json only via Robolectric's android-all jar -- a plain JVM test
+// that calls Card.toJSON() hits the stub in android.jar and throws.
 dependencies {
     androidTestImplementation 'androidx.test:core:1.6.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test:rules:1.6.1'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    // 4.15.1 is the newest line that runs on JDK 17 (this module has no
+    // toolchain block and targets 17) and it tops out at SDK 35, so
+    // src/test/resources/robolectric.properties pins the sandbox to SDK 34.
+    testImplementation 'org.robolectric:robolectric:4.15.1'
+    testImplementation 'androidx.test:core:1.6.1'
 }

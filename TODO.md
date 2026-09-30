@@ -49,17 +49,30 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 
 The Jenkins matrix runs the same APK on API 34-37. API 37 is currently a known-failing level (reported and archived, not enforced).
 
-**Two earlier diagnoses for this were wrong and are retracted.** Both were artifacts of when the device was asked, not of the platform:
+**Three earlier diagnoses for this were wrong and are retracted.** All three were artifacts of when or how the device was asked, not of the app:
 
 1. `am start -n com.smccloud.hotdeath/.Main` returning `Activity class does not exist` was read as proof the platform could not launch the app. But `connectedAndroidTest` uninstalls both APKs when a run finishes, so that command was being run against a device that no longer had the app installed. It produces the same error on every API level, passing or not.
-2. `install-commit ... Broken pipe (32)` was read as an occasional flaky install. It is the package service being unreachable while `system_server` is still crash-looping during boot.
+2. `install-commit ... Broken pipe (32)` was read as an occasional flaky install. It is the install commit throwing, deterministically.
+3. The `Broken pipe (32)` and the restart loop were read as the device being starved of memory, so api37 was given 4 GB instead of 2 GB. It fails identically at both, and the device log shows no lowmemorykiller, no OOM and no FATAL. The memory bump has been reverted.
 
-**What is actually happening**, from a device with the app genuinely installed and `system_server` settled: the Android 17 image restarts `system_server` continuously during boot. One build logged 156 restarts (PIDs climbing 660 -> 32679) over roughly half an hour before it finally held still for 10s. While it is looping, `pm path` and `am start` return `Can't find service: package` / `Broken pipe (32)`. Even once settled, the package service is saturated — `PackageManagerService.snapshotComputer` shows `waiters=26` with 500ms monitor contention — so the install still fails on the 2 GB the controller gives the emulator.
+**The actual cause**, from the device log of a run where the app is installed and system_server has settled:
+
+```
+E/SystemServiceRegistry: No service published for: persistent_data_block
+android.os.ServiceManager$ServiceNotFoundException: No service published for: persistent_data_block
+	at com.android.server.pm.PackageManagerSession.markAsSealed(...:2651)
+	at com.android.server.pm.PackageInstallerSession.commit(...:2401)
+	at com.android.server.pm.PackageManagerShellCommand.doCommitSession(...:4459)
+I/Watchdog: Pausing of HandlerChecker: monitor thread for reason:
+            vold#commitChanges might be slow
+```
+
+`persistent_data_block` is the Block Disk Assurance service, published by `vold`. On this image the package installer requires it to commit a session, and the service is not there, so the commit throws and the installer dies mid-commit — which surfaces as `Broken pipe (32)`. The same missing service is behind the restart loop: the watchdog pauses its handler checks on `vold#commitChanges`, and system_server comes back up to retry. This is a defect in the `google_apis` 37.0 image, not in the app. Nothing in this repo can fix it, and no resource setting reaches it.
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| Give api37 a usable device | The controller is 8 GB and gives each AVD `-memory 2048`. The 37.0 image is much heavier and starves the package service even once `system_server` is stable. Raising the memory for this level is the first thing to try, and it is cheap relative to the alternatives. | api37 settles, then installs the app |
-| Ruling out the image | If more memory does not get it to a passing install, test `system-images;android-37.0;default;x86_64`: if the AOSP image launches the app, the `google_apis` 37.0 image is the culprit and a different tag is the fix. | launching on the AOSP image |
-| Why the 3 tests still fail | With the app installed and the device settled, `MainLaunchTest` fails on 37 with `Unable to resolve activity for: Intent { act=MAIN cat=[LAUNCHER] cmp=com.smccloud.hotdeath.test/com.smccloud.hotdeath.Main}`. The component package is the *test* APK's, so this may be `ActivityScenario` building a component name in the wrong package rather than the platform refusing a valid one. The 6 `PenaltyStackTest` cases pass on 37, so the app itself installs and runs there. Worth re-checking only after the device is healthy enough to install onto, since a failed install produces the same class of error. | `MainLaunchTest` passes on 37 |
-| Promote back to enforced | Once `MainLaunchTest` passes on 37, remove `37` from `KNOWN_FAILING` in the `Jenkinsfile` so it starts gating again. | a green api37 row in the emulator matrix |
+| Try a different 37 image | The fix is an image without the defect, not a change here. `system-images;android-37.0;default;x86_64` is the obvious candidate: the AOSP build ships no Google Play/vold extras, and the missing service is exactly the kind of thing a Google-added partition block is for. Change the tag in the matrix `for entry` line and rebuild. | the install commits on 37 and `MainLaunchTest` runs |
+| Check which 37 tags exist | 37.0/37.1/37.2 are all published. If 37.1 or 37.2 ships a working vold, that is a smaller change than switching to `default`. The matrix already spells the tag out per level for this reason. | a tag whose install commits |
+| If no image works | Then api37 is not testable on this controller and the honest end state is to drop it from the matrix, or leave it known-failing with a note pointing here. | a decision either way |
+| Promote back to enforced | Only after the install commits and `MainLaunchTest` passes. Remove `37` from `KNOWN_FAILING` in the `Jenkinsfile` so it starts gating again. | a green api37 row in the emulator matrix |
 

@@ -166,6 +166,18 @@ node {
     }
   }
 
+  // Deliberately before the Emulator stage: R8 is a separate code path from
+  // assembleDebug and it is the one that produces the published artifact, so a
+  // minification failure should cost seconds here rather than the 25 minutes the
+  // matrix takes to find out.
+  stage('Assemble release') {
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh "${gradleHome} --no-daemon --stacktrace assembleRelease"
+      }
+    }
+  }
+
   // Instrumented tests need a real Android runtime, which neither a plain JVM
   // unit test nor Robolectric can stand in for: the launch smoke test
   // inspects live widgets, and only an emulator exercises the game's own
@@ -593,6 +605,11 @@ node {
   stage('Archive') {
     archiveArtifacts artifacts: "${moduleDir}/app/build/outputs/apk/debug/*.apk",
                      allowEmptyArchive: true, fingerprint: true
+    // The release APK is the artifact that gets published, so it is archived
+    // with a fingerprint like the rest: a published binary has to be traceable
+    // back to the build that produced it.
+    archiveArtifacts artifacts: "${moduleDir}/app/build/outputs/apk/release/*.apk",
+                     allowEmptyArchive: true, fingerprint: true
     // The APK check has to run in sh. file(...) hands back an
     // UninstantiatedDescribableWithInterpolation inside the script-security
     // sandbox, so .listFiles() there dies with MissingMethodException.
@@ -601,6 +618,7 @@ node {
       script: """
         set -euo pipefail
         ls -1 '${moduleDir}/app/build/outputs/apk/debug/'*.apk 2>/dev/null || true
+        ls -1 '${moduleDir}/app/build/outputs/apk/release/'*.apk 2>/dev/null || true
       """,
       returnStdout: true
     ).trim()
@@ -609,6 +627,23 @@ node {
       currentBuild.result = 'UNSTABLE'
     } else {
       echo "APK(s) produced:\n${apks}"
+    }
+
+    // Separate from the check above on purpose: a build with a debug APK but no
+    // release APK is publishable-looking but has nothing to publish, and the
+    // warning above would let it read as a normal success.
+    def releaseApks = sh(
+      script: """
+        set -euo pipefail
+        ls -1 '${moduleDir}/app/build/outputs/apk/release/'*.apk 2>/dev/null || true
+      """,
+      returnStdout: true
+    ).trim()
+    if (releaseApks.isEmpty()) {
+      echo 'WARNING: no release APK, so there is no artifact to publish'
+      currentBuild.result = 'UNSTABLE'
+    } else {
+      echo "Publishable artifact(s):\n${releaseApks}"
     }
   }
 }

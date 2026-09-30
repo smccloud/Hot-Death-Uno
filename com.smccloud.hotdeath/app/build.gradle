@@ -17,9 +17,22 @@ android {
 
         targetSdk 36
 
-        versionCode 12
+        // Versioning: MAJOR.MINOR.PATCH, where PATCH is the number of passing
+        // tests in the build that produced the artifact. It starts at 1.1.0 and
+        // moves by 0.0.1 per passing test, so the patch number is a running count
+        // of green tests rather than a hand-maintained sequence -- bumping it is
+        // a matter of reading the pass count off the build that just ran.
+        //
+        // versionCode only ever has to increase, and Android compares nothing
+        // else, so it encodes the same three numbers: major*1000000 +
+        // minor*1000 + patch. That gives three digits for the minor and three for
+        // the patch; when the patch count reaches 1000, bump the minor and start
+        // the patch over at 0.
+        //
+        // 1.1.143 = 116 unit tests plus 27 instrumented, as build #45 ran them.
+        versionCode 1001143
 
-        versionName "1.0.12"
+        versionName "1.1.143"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the
@@ -34,6 +47,14 @@ android {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Signed with the debug key, deliberately and temporarily: the
+            // project has no release keystore, and an unsigned APK cannot be
+            // installed, so there is nothing to publish until one is configured.
+            // Everything else about this variant is a real release build --
+            // minified by R8, no 'g' suffix on the version name. Swapping in a
+            // proper signingConfig is the only change needed later; keep the
+            // keystore and its passwords out of this file either way.
+            signingConfig signingConfigs.debug
         }
         debug {
             versionNameSuffix = 'g'

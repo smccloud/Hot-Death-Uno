@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.0.12 (`versionCode` 12) |
+| Current version | 1.1.143 (`versionCode` 1001143) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 (no third-party dependencies) |
 | Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
@@ -268,7 +268,20 @@ you run `gradle wrapper` once to generate it, or let Android Studio regenerate i
 sync. There is also no `local.properties` — set `sdk.dir` to your Android SDK path, or
 rely on `ANDROID_HOME`.
 
-There are no unit or instrumented tests in this repository, and no CI configuration.
+### Tests and CI
+
+`app/src/test` holds the JVM and Robolectric suite (`gradle testDebugUnitTest`) and
+`app/src/androidTest` the instrumented one (`gradle connectedAndroidTest`, which
+needs a device or emulator). A tracked `Jenkinsfile` runs both: unit tests, lint,
+`assembleDebug`, `assembleRelease`, then `connectedAndroidTest` on a headless
+emulator at API 34, 35 and 36.
+
+The release APK is the published artifact, and it is currently **signed with the
+debug key** because the project has no release keystore — an unsigned APK cannot be
+installed. `app/build.gradle` carries a comment saying so at the `signingConfig`
+line. One more thing the pipeline does not cover: `connectedAndroidTest` runs
+against the debug APK, so the R8-minified release build is assembled and archived
+but never exercised on a device.
 
 ---
 
@@ -291,7 +304,7 @@ There are no unit or instrumented tests in this repository, and no CI configurat
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 12
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1001143
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
@@ -474,9 +487,6 @@ Three behavioral changes came with the retarget:
 - **Snapshot corruption is swallowed.** Both the `Game(JSONObject, ...)` constructor and
   `GameActivity` wrap deserialization in `catch (JSONException e)` with a `FIXME` and
   no recovery, so a corrupt `gamestate` silently starts a fresh game.
-- **`Card(JSONObject)` reads `pointMultiplier` with `getInt()`** while `toJSON()` writes
-  a `double`. Truncation happens to be harmless for the current values (`1.0`, `0.5`,
-  `2.0`) but it is lossy in principle.
 - **Toast durations can go negative.** `GameTable` computes the duration as
   `getDelay() - 500`, which is negative both during fast-forward (`0`) and while the
   human seat is inactive (`250`).
@@ -543,8 +553,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.0.12, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.1.143, migrated to a modern Gradle /
 AGP 7.3.0 toolchain.
+
+From 1.1.0 the patch number is the count of passing tests in the build that produced
+the artifact — it moves by 0.0.1 per test rather than being maintained by hand — so
+`versionName` 1.1.143 means 116 unit tests plus 27 instrumented all went green.
+`versionCode` encodes the same three numbers as `major * 1000000 + minor * 1000 +
+patch`, which leaves three digits each for the minor and the patch.
 
 See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
 and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.

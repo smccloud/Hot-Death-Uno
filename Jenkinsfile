@@ -312,12 +312,17 @@ node {
             #
             # So require the same answers twice, a gap apart, and require the
             # system_server PID to be identical in both. A restart changes it.
+            #
+            # The service checks are exact matches, not `grep -q found`. That
+            # substring test also matches "not found", so it passed whether or
+            # not the service was up, which made the check decorative. It
+            # returns "Service package: found" or "Service package: not found".
             booted=0
             for _ in \$(seq 1 120); do
               if "\$ADB" devices | awk '\$1 ~ /^emulator-/ && \$2 == "device"' | grep -q . \\
                  && [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ] \\
-                 && "\$ADB" shell 'service check activity' 2>/dev/null | grep -q found \\
-                 && "\$ADB" shell 'service check package' 2>/dev/null | grep -q found; then
+                 && "\$ADB" shell 'service check activity' 2>/dev/null | grep -qx 'Service activity: found' \\
+                 && "\$ADB" shell 'service check package' 2>/dev/null | grep -qx 'Service package: found'; then
 
                 # Same PID before and after the settle, and the services still
                 # answering at the end. One round is not enough: a restart in
@@ -326,7 +331,7 @@ node {
                 sleep 10
                 pid_b="\$("\$ADB" shell pidof system_server 2>/dev/null | tr -d '\\r\\n')"
                 if [ -n "\$pid_a" ] && [ "\$pid_a" = "\$pid_b" ] \\
-                   && "\$ADB" shell 'service check package' 2>/dev/null | grep -q found; then
+                   && "\$ADB" shell 'service check package' 2>/dev/null | grep -qx 'Service package: found'; then
                   booted=1
                   echo "\$AVD settled: system_server pid \$pid_a held for 10s" >&2
                   break

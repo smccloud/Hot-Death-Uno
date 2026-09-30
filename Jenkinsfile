@@ -243,24 +243,53 @@ node {
             exit 1
           fi
           chmod 600 app/keystore/hotdeath-release.jks
-          printf '%s\n' "$HOTDEATH_SIGNING" > app/keystore/keystore.properties
+          # The signing credential is a properties blob that Jenkins hands over as
+          # one string, and it is easy to create it as a single space-separated
+          # line. Properties.load() reads that as a single key whose value
+          # swallows the rest, so Gradle would find no passwords at all and fail
+          # inside R8. Normalise both shapes to newline-separated pairs, splitting
+          # only on the four known key names -- never on a bare '=' -- so a
+          # password containing an equals sign cannot be cut in half. The trailing
+          # whitespace strip is not cosmetic: the spaces that separated the pairs
+          # land at the end of every value, and Properties.load() trims leading
+          # whitespace but keeps trailing, so storeFile would miss its file and
+          # the password would simply be wrong. A password with a deliberate
+          # trailing space is therefore not supported. The whitespace strip has
+          # to be a separate sed pass: in the pass that inserts the newlines, `$`
+          # anchors to the end of the whole pattern space rather than to each
+          # line, so it would only ever reach the last pair.
+          RAW_PROPS=app/keystore/.signing.raw
+          printf '%s\n' "$HOTDEATH_SIGNING" > "$RAW_PROPS"
+          chmod 600 "$RAW_PROPS"
+          tr -d '\r' < "$RAW_PROPS" | sed -e 's/storeFile=/\nstoreFile=/' -e 's/storePassword=/\nstorePassword=/' -e 's/keyAlias=/\nkeyAlias=/' -e 's/keyPassword=/\nkeyPassword=/' | sed -e 's/[[:space:]]*$//' -e '/^$/d' > app/keystore/keystore.properties
+          rm -f "$RAW_PROPS"
           chmod 600 app/keystore/keystore.properties
-          # Check the keystore the properties point at actually exists, from the
-          # same directory Gradle resolves it against. Without this, a
-          # storeFile that does not match where this stage puts the key surfaces
-          # as a signing failure partway through R8, minutes later and after the
-          # expensive work.
-          STORE_FILE=$(sed -n 's/^[[:space:]]*storeFile[[:space:]]*=[[:space:]]*//p' app/keystore/keystore.properties | head -1)
+          # Name the keys that are missing. Never their values, and never any
+          # fragment of the credential: build #51 printed the whole blob into
+          # the console log by echoing a value cut out of it, and Jenkins' log
+          # masking only covers the exact secret text, so a fragment slips past
+          # it. Nothing derived from this credential gets echoed from here on.
+          MISSING=
+          for KEY in storeFile storePassword keyAlias keyPassword; do
+            grep -q "^${KEY}=" app/keystore/keystore.properties || MISSING="${MISSING} ${KEY}"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "ERROR: keystore.properties is missing:${MISSING}"
+            exit 1
+          fi
+          # Confirm the keystore the properties name is really there, resolved
+          # from the same directory Gradle resolves a relative storeFile against.
+          STORE_FILE=$(sed -n 's/^storeFile=//p' app/keystore/keystore.properties | head -1)
           case "$STORE_FILE" in
             /*) RESOLVED_STORE="$STORE_FILE" ;;
             *) RESOLVED_STORE="app/$STORE_FILE" ;;
           esac
           if [ ! -f "$RESOLVED_STORE" ]; then
-            echo "ERROR: keystore.properties says storeFile=$STORE_FILE, which resolves to $RESOLVED_STORE from the app module dir, and there is no file there"
+            echo "ERROR: the storeFile in keystore.properties does not name a file that exists"
             echo '       A relative storeFile resolves against the app module dir, so it wants keystore/hotdeath-release.jks'
             exit 1
           fi
-          echo "keystore in use: $RESOLVED_STORE"
+          echo 'keystore.properties: all four keys present, and the keystore it names exists'
         '''
         }
       }

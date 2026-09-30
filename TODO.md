@@ -52,16 +52,29 @@ The rest of `Game`'s old package-private members are `internal`, which keeps the
 
 Kotlin's `==` calls `equals()` where Java's `==` is identity. None of these classes overrides `equals`, checked across every source file, so the reference comparisons in `sortHand`, `advanceRound` and `getNextPlayer` mean the same thing they used to.
 
-### What the tests could not reach, and how the translation was checked instead
+### How Game.kt was checked before it had a test
 
-The 137 unit tests cover `Hand`, `checkCard`, `hasValidCards` and the save/resume round-trips. They do **not** reach `dealHands`, `advanceRound`, `handleSpecialCards` or `assessPenalty` — the round loop needs a real `GameTable` with every card bitmap loaded, which is why `HandPlayabilityTest` sets `m_currCard`, `m_currColor` and `m_penalty` by reflection and says so. So the largest part of `Game.kt` was checked structurally rather than by execution, against the Java it replaced:
+`Game.kt` was written before any of this could run it, so it was checked structurally against the Java it replaced — 73 of 73 methods carried over, the sequence of `R.string` references **identical** at 47 of 47, the sequence of `Card.ID_*` references **identical** at 254 of 254, and every `m_*` assignment accounted for, the only differences being five fields that moved to Kotlin declaration-site initialisers and three the Java wrote in a constructor. Kotlin's `==` calls `equals()` where Java's `==` is identity, and no class here overrides `equals`, checked across every source file, so the reference comparisons still mean what they meant.
 
-  - every method in the 2,306-line `Game.java` is present in `Game.kt`, 73 of 73, the only difference being the constructor itself;
-  - the sequence of `R.string` references is **identical**, 47 of 47, so no message was dropped or reordered;
-  - the sequence of `Card.ID_*` references is **identical**, 254 of 254, so no card rule was dropped or reordered;
-  - every `m_*` assignment is accounted for, the only differences being five fields that moved to Kotlin declaration-site initialisers and three that the Java wrote in a constructor.
+That argued nothing was dropped. It is not the same as playing a game, which is what the next section is about.
 
-None of that substitutes for running the game. **A headless round is still the thing to do on-device before trusting this**, and it is the outstanding item on stage 4.
+### Driving the round loop, and the bug that was not one
+
+`GameRoundLoopTest` runs `startGame` then `advanceRound` to a finish, twice — once on house rules, once on standard rules — plus a check that standard rules deal seven each. It is the first thing in the suite that reaches `dealHands`, `advanceRound`, `handleSpecialCards`, `assessPenalty`, `calculateScore`, `sortHand` and `finishRound`: everything `HandPlayabilityTest` could only reach by setting `m_currCard`, `m_currColor` and `m_penalty` by reflection, because the code that sets them properly is `startRound`, which deals and draws off the top.
+
+Nothing asserts a score or a card, because the deal is random — the deck is shuffled, the dealer is chosen at random, and the dealer picks how many cards to deal. Every assertion is an invariant that holds whatever came out: no card created or destroyed (hands + draw pile + discard pile must add back up to the deck), every hand turned over at the end of a round, the player who went out is the next dealer, and a total is never below this round's score. Run often enough, the shuffles reach card rules that the fixed-deck tests cannot.
+
+**The first version of it found a NullPointerException in `checkForAllBastardCards`, and it was the test's fault.** Worth keeping, because it reads exactly like a real card-rule bug. `Game` extends `Thread`, and `GameActivity.onCreate` ends by calling `m_gt.startGameWhenReady()`, which calls `m_game.start()`. So building the activity with `Robolectric.buildActivity(...).setup()` quietly starts a second thread that calls `startGame` — and the test was calling `startGame` too. Two threads dealt the same deck at once: every hand came out with twice the cards it should have had, the draw pile was filled twice over, and `sortHand` then wrote nulls into the back half of each hand because fewer cards claimed it than the hand's own count said. The NPE came from `postDealHands` reading one of those nulls.
+
+Confirmed by instrumenting `dealHands`: `enter loop2` printed twice before either deal finished, with `m_numCardsToDeal=9` and the hands growing past 9 each. It reproduces identically on the pre-Kotlin `Game.java`, which is how it was ruled out as a translation regression in the first place.
+
+The fix is `buildActivity(...).get()` instead of `setup()`, so `onCreate` never runs and the game thread never starts, plus a hand-built `GameTable` — its constructor is what calls `setGameTable` — the four button views `onCreate` would have inflated, and a measure/layout pass, because `RedrawTable` positions cards from `m_ptMessages` and `onSizeChanged` is what works those out. The round loop is then driven from the test thread alone, single-threaded, so no assertion reads state that is being mutated underneath it.
+
+**It needs LEGACY looper mode and costs about five minutes.** In PAUSED mode `runOnUiThread` defers, and the run did not finish inside seven minutes; in LEGACY the redraws actually execute, which is the cost. That is the trade for driving the loop without a second thread, and two rounds is deliberately not four — two is already enough to reach a deal, a win, penalties and a score.
+
+| Item | Work | Verifiable by |
+| --- | --- | --- |
+| ~~Cover the round loop~~ | ~~`GameRoundLoopTest`: two rounds driven to a finish on each ruleset, plus the standard-rules deal of seven. Asserts card conservation, hands revealed at round end, the winner becoming the dealer, and scores that only rise. Random deal, so invariant-only.~~ | build #64: 140 unit + 27 instrumented, 167 passed |
 
 
 The card table itself was generated from the old `CardDeck.java` rather than retyped: 648 `new Card(...)` lines, and a card's `deckIndex` *is* its position, which saved games store. Getting that table wrong would not fail a build or a test, it would invalidate saved games and silently deal a different deck. So the four variants were dumped to text under both implementations and diffed: same cards, same order, same indices, same multipliers, same `getCard` lookups.

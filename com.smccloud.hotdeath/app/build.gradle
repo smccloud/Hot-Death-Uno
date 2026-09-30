@@ -57,15 +57,14 @@ android {
         // needed a real Game, and the isfinal branch that charges the green 3
         // to its owner's virus penalty.
         //
-        // 1.3.0 adds no tests, so the patch stays at 164's count and the minor
-        // moves instead: this is stage 4 of the Java-to-Kotlin migration, the
-        // Player hierarchy and Game, which moves files without changing what
-        // they do. See the versioning note above for why a release with no new
-        // tests has to move the minor and not the patch. 137 unit tests plus
-        // 27 instrumented, unchanged.
-        versionCode 1003000
+        // 1.3.167 adds GameRoundLoopTest, the three tests that drive startRound and
+        // advanceRound to a finish. That is the code the rest of the suite could
+        // only reach by poking private fields in: everything from dealHands through
+        // finishRound. 140 unit tests plus 27 instrumented, so the patch moves
+        // from 164 and the minor stays where stage 4 put it.
+        versionCode 1003167
 
-        versionName "1.3.0"
+        versionName "1.3.167"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

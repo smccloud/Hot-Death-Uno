@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.3.0 (`versionCode` 1003000) |
+| Current version | 1.3.167 (`versionCode` 1003167) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
@@ -310,7 +310,7 @@ never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1003000
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1003167
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
@@ -559,13 +559,12 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.3.0, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.3.167, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced
 the artifact — it moves by 0.0.1 per test rather than being maintained by hand — so
-`versionName` 1.2.164 meant 137 unit tests plus 27 instrumented all green, which is
-still the count as of 1.3.0 — that release moved files, not tests.
+`versionName` 1.3.167 means 140 unit tests plus 27 instrumented all went green.
 `versionCode` encodes the same three numbers as `major * 1000000 + minor * 1000 +
 patch`, which leaves three digits each for the minor and the patch.
 

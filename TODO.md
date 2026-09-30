@@ -17,7 +17,9 @@ Java-to-Kotlin migration.
 
 ## Bugs the unit tests found
 
-Stage 2 turned up three defects in the app itself. They are recorded rather than fixed here: each one changes behaviour, and finding them was what the stage was for. Two of them are pinned by tests that assert the **current** behaviour — the Shitter in `HandTest`, the label spacing in `CardTextTest` — so fixing either turns that class red on purpose, to stop the fix passing unnoticed. The third is deliberately *not* pinned; it explains itself below.
+Stage 2 turned up three defects in the app itself. **One is fixed** (the double-spaced labels, build #44). The other two are recorded rather than fixed here: each one changes behaviour, and finding them was what the stage was for.
+
+The Shitter is pinned by `HandTest` asserting the **current** behaviour, so fixing it turns that class red on purpose, to stop the fix passing unnoticed. The multiplier is deliberately *not* pinned; it explains itself below.
 
 Two of the three are visible to a player; one is latent and needs re-checking before anyone treats it as a scoring bug.
 
@@ -31,15 +33,19 @@ The reason this looks deliberate at first is that the sibling cards are protecte
 
 Step 10's floor (`Hand.java:501`) then compares against that clobbered 0 instead of 150, so mid-game a Shitter hand can never score below 0 — where the intent was a floor of 150. `shitterAloneDoesNotRaiseTheTotal` and `shitterKeepsAMagicFiveHandOffTheFloor` in `HandTest` assert exactly this, and will need updating with the fix.
 
-### Every card label is double-spaced
+### Every card label was double-spaced — fixed in build #44
 
-The `cardcolor_*` strings all end in a trailing space, and `Card.toString` joins colour and value with another one (`Card.java:305`), so a plain card renders `"Blue  7"` and a Reverse `"Green  Reverse"`.
+The `cardcolor_*` strings all end in a trailing space, and `Card.toString` joined colour and value with another one (the join is now `strColor + strValue` at `Card.java:307`), so a plain card rendered `"Blue  7"` and a Reverse `"Green  Reverse"`. **Dropped the join's own space; the four resources are untouched.**
 
-Worth knowing which cards are affected before fixing: only the two paths that fall through to `msg = strColor + " " + strValue`. Cards matched by the `m_id` switch return early (`Card.java:274-277`) and are clean, so the F.U., Shitter, Quitter, Shield, Magic 5, Holy Defender and Mystery Wild labels are all fine. Every *numbered* card and every Reverse/Draw/Skip is double-spaced. Cosmetic only. `CardTextTest` asserts the current double-spaced form for the numbered and value-switch cards.
+Worth keeping from the original note, because it decided which half was safe to touch: only the two paths that fall through to `msg = strColor + strValue` were affected. Cards matched by the `m_id` switch return early (`Card.java:274-277`) and were always clean, so the F.U., Shitter, Quitter, Shield, Magic 5, Holy Defender and Mystery Wild labels never had it. Every *numbered* card and every Reverse/Draw/Skip did. Cosmetic only, and it still is.
+
+The join was the right half to remove, not the resources. `R.array.colors` feeds a single-choice picker in `GameTable.java:1920` and `Game.colorToString` (`Game.java:2258`) logs a colour on its own, so both still want that trailing space; stripping the resources would have touched more call sites for the same one-space result.
+
+**What the tests did and did not guard, corrected.** An earlier version of this file claimed that fixing either half would turn `CardTextTest` red. That was wrong. The expectations were written as `getString(R.string.cardcolor_x) + " " + n`, which pins the join and the resource independently and never looks at the rendered label — so strip the trailing space out of `strings.xml` instead and all five still pass, leaving `"Blue7"`. The five now spell the join without its space, and `noCardLabelCarriesADoubleSpace` is the test that has teeth: it asserts on the label itself, over the numbered, Reverse, Draw, Double-Draw, Skip, value-switch and early-return cards.
 
 ### Save/resume truncates card multipliers — latent, not a scoring bug yet
 
-`Card`'s `JSONObject` constructor reads `m_pointMultiplier` with `getInt` even though the field is a `double` (`Card.java:317`), while `toJSON` writes it as a double (`Card.java:334`). Android's `JSONObject.getInt` truncates toward zero, so the 0.5 Holy Defender (`CardDeck.java:66` and `:183`) resumes as `0.0`. `getDouble` is the whole fix.
+`Card`'s `JSONObject` constructor reads `m_pointMultiplier` with `getInt` even though the field is a `double` (`Card.java:319`), while `toJSON` writes it as a double (`Card.java:336`). Android's `JSONObject.getInt` truncates toward zero, so the 0.5 Holy Defender (`CardDeck.java:66` and `:183`) resumes as `0.0`. `getDouble` is the whole fix.
 
 **This does not currently change any score.** `getPointMultiplier()` has exactly one definition and no call sites at all — `Hand.calculateValue` reads `getPointValue()` (`Hand.java:410`) and never the multiplier, and the routine's own header comment says multipliers are "useless now". So the 0.5 silently becomes 0.0 on every resume and nothing observable happens yet.
 
@@ -48,8 +54,8 @@ That is why it is filed as latent rather than as a live bug: it is a one-word fi
 | Item | Work | Verifiable by |
 | --- | --- | --- |
 | Restore the Shitter's pseudo-value | Either re-apply 150 after step 3, or widen the `bFullMonty` skip to cover a lone Shitter. Then step 10's floor means what its comment says. Update the two `HandTest` cases that assert current behaviour. | score a hand holding a Shitter, and watch a Strong/Expert AI shed it |
-| Trim the double space | Drop the extra `" "` at `Card.java:305` or strip the trailing space from the four `cardcolor_*` strings. Pick one; doing both empties the separator. | read any card label |
-| Fix the multiplier round-trip | `getInt` → `getDouble` at `Card.java:317`, plus a `JsonRoundTripTest` case using `0.5`. | round-trip a hand holding a 0.5 card |
+| ~~Trim the double space~~ | ~~Dropped the join's own `" "` at `Card.java:307` and left the four `cardcolor_*` strings alone — the trailing space *is* the separator, and the colour picker plus `Game.colorToString` both still want it. Updated the five `CardTextTest` expectations and added the one that asserts on the rendered label.~~ | build #44: 115 unit + 27 instrumented, 142 passed, full pipeline green |
+| Fix the multiplier round-trip | `getInt` → `getDouble` at `Card.java:319`, plus a `JsonRoundTripTest` case using `0.5`. | round-trip a hand holding a 0.5 card |
 | Still uncovered | `Hand.hasValidCards` needs a real `Game` (it calls `checkCard`), and the `isfinal` branch adds to `Player.getVirusPenalty` for the green 3 (`Hand.java:372`). Both need a `Context`, so both are reachable under Robolectric. | `GameOptionsTest`-style activity |
 
 ## Messaging

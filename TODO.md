@@ -47,7 +47,7 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 
 ## API 37
 
-The Jenkins matrix runs the same APK on API 34-37. API 37 is currently a known-failing level (reported and archived, not enforced).
+The Jenkins matrix runs the same APK on API 34-36. **API 37 has been dropped from the matrix**: every published 37.x x86_64 image fails on this controller, for reasons that are not about the app. It cost roughly 30 minutes of boot polling per build to confirm that, so the level is out rather than left parked as known-failing. The matrix entry to restore is `37:37.2:google_apis_ps16k`.
 
 **Three earlier diagnoses for this were wrong and are retracted.** All three were artifacts of when or how the device was asked, not of the app:
 
@@ -71,8 +71,9 @@ I/Watchdog: Pausing of HandlerChecker: monitor thread for reason:
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| 37.2 tried, same failure | api37 now runs `system-images;android-37.2;google_apis_ps16k;x86_64` and behaves the same: 176 restarts, never settled inside the boot window, recorded known-failing. Its device log shows clean service initialisation and **no** crash, OOM or `persistent_data_block` error at all — it simply never gets past boot. So the defect is not specific to the 37.0 image, and 37.2 is not a way out. | build #39: `known-failing:[api37-37.2-google_apis_ps16k]`, 34-36 all 9/9 |
-| Remaining image options | 37.1 `_ps16k` is the only other published variant and is likely no different. 37.0's other flavours (`google_apis_playstore`, `google_apis_playstore_ps16k`) are untried. `system-images;android-37.*;default;x86_64` is **not published for any 37.x**, so the AOSP fallback does not exist. | a tag whose install commits |
-| If no image works | Every 37.x image now either fails to install (`persistent_data_block` missing on 37.0) or never finishes booting (37.2). On this controller API 37 looks untestable, and the honest end state is to drop it from the matrix rather than keep paying ~30 min per build to rediscover that. | a decision either way |
-| Promote back to enforced | Only after the install commits and `MainLaunchTest` passes. Remove `37` from `KNOWN_FAILING` in the `Jenkinsfile` so it starts gating again. | a green api37 row in the emulator matrix |
+| 37.2 tried, also unusable | `system-images;android-37.2;google_apis_ps16k;x86_64` gave 176 restarts and never settled inside the boot window. Its device log shows clean service initialisation and **no** crash, OOM or `persistent_data_block` error at all — it simply never gets past boot. So it fails differently from 37.0, and neither image works. | build #39: `known-failing:[api37-37.2-google_apis_ps16k]`, 34-36 all 9/9 |
+| Dropped from the matrix | With no working image, api37 is out of the `for entry` list and `KNOWN_FAILING` is empty, so 34-36 all gate. Every level that runs is enforced again. | a build showing `tested:[api34 api35 api36] known-failing:[]` |
+| Images not yet tried | 37.1 `_ps16k`, and 37.0's other flavours (`google_apis_playstore`, `google_apis_playstore_ps16k`). Both were left alone deliberately: 37.2 showed the problem is not confined to one image, so each further attempt is ~30 min for a result that will probably be the same. Worth trying if a report says Google shipped an image fix. | a tag whose install commits |
+| No AOSP fallback | `system-images;android-37.*;default;x86_64` is **not published for any 37.x**. An earlier note here named it as the obvious candidate; that was wrong and it was never available. | a published tag in `sdkmanager --list` |
+| Restore api37 when one works | Add `37:37.2:google_apis_ps16k` back to the matrix. It will be enforced automatically, since `KNOWN_FAILING` is empty. `MainLaunchTest` must pass, not merely the install. | a green api37 row in the emulator matrix |
 

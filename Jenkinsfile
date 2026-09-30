@@ -216,31 +216,39 @@ node {
           # re-fetch the remote repository four times over.
           AVAILABLE="\$("\$SDKMANAGER" --sdk_root="\$SDK" --list 2>/dev/null || true)"
 
-          # API level : system-image tag. Android 17 is published as 37.0/37.1/
-          # 37.2 rather than a bare 37, so the tag is spelled out per level
-          # instead of being assumed from the API number.
+          # API level : system-image tag, with an optional flavour third. The
+          # tag is spelled out rather than derived from the API number because
+          # Android 17 is published as 37.0/37.1/37.2, not a bare 37.
           #
-          # api37 is on 37.2 rather than 37.0 because 37.0's google_apis image
-          # cannot commit a package install: the session commit needs the
+          # API 37 is not in this list. Every published 37.x x86_64 image fails
+          # on this controller: 37.0's google_apis build cannot commit a package
+          # install at all, because the session commit needs the
           # persistent_data_block service (Block Disk Assurance, published by
           # vold) and that image does not publish it, so the installer dies
-          # mid-commit with "Broken pipe (32)". TODO.md has the trace.
+          # mid-commit with "Broken pipe (32)". 37.2's image never finishes
+          # booting -- 176 system_server restarts and counting. Neither is an
+          # app problem: 34-36 run the same APK and all 9 tests pass, and in the
+          # runs where 37 got as far as collecting tests, all 6 PenaltyStackTest
+          # cases passed. The 3 MainLaunchTest failures there targeted
+          # com.smccloud.hotdeath.test, which AGP had already uninstalled, so
+          # they are the same artifact TODO.md records as diagnosis 1 and not
+          # evidence against 37. TODO.md carries the traces and the untried
+          # images.
           #
-          # 37.1 and 37.2 exist only as _ps16k -- 16 KB page size, no plain
-          # google_apis build -- so the suffix is part of the tag. Emulator
-          # 37.1.11 on the controller supports 16 KB pages.
+          # It cost roughly 30 minutes of boot polling per build to learn that,
+          # so the level is out rather than left parked as known-failing. Add
+          # it back as "37:37.2:google_apis_ps16k" once an image works.
           #
-          # KNOWN_FAILING levels are still exercised -- they are how we find out
-          # when the app starts working on a new platform -- but their results
-          # are archived rather than published, so they do not fail the build.
-          # Remove a level from this list once its tests pass and it should start
-          # gating again. TODO.md tracks the api37 app-side work.
-          KNOWN_FAILING='37'
+          # KNOWN_FAILING is kept because a future level may need it: those
+          # levels still run -- they are how we find out when the app starts
+          # working on a new platform -- but their results are archived rather
+          # than published, so they do not fail the build.
+          KNOWN_FAILING=''
           ran=''
           skipped=''
           failed=''
           known_failed=''
-          for entry in 34:34 35:35 36:36 37:37.2:google_apis_ps16k; do
+          for entry in 34:34 35:35 36:36; do
             api="\${entry%%:*}"
             rest="\${entry#*:}"
             tag="\${rest%%:*}"
@@ -466,7 +474,7 @@ node {
                 failed="\$failed \$AVD"
               else
                 echo "TESTS FAILED on \$AVD, but \$AVD is a known-failing level" >&2
-                echo "(API 37 will not launch this app's activities yet -- see TODO.md)" >&2
+                echo "(a level that cannot launch the app's activities -- see TODO.md)" >&2
                 echo "recording it, and NOT failing the build" >&2
                 known_failed="\$known_failed \$AVD"
               fi

@@ -17,7 +17,7 @@ networked play.
 | Package | `com.smccloud.hotdeath` |
 | Current version | 1.2.164 (`versionCode` 1002164) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
-| Language | Java 17 (no third-party dependencies) |
+| Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
 | License | MIT — see [License](#license) |
 
@@ -308,7 +308,7 @@ but never exercised on a device.
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~7,600 lines
+            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (11 Java, 5 Kotlin)
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml

@@ -5,7 +5,7 @@ Java-to-Kotlin migration.
 | Stage | Work | Verifiable by |
 | --- | --- | --- |
 | ~~0~~ | ~~Add Kotlin plugin to `app/build.gradle` only, no source changes~~ | ~~one CI compile~~ |
-| 1 | Run a headless Android emulator in Jenkins so `connectedAndroidTest` can take over the "manual on-device" checks below. Needs KVM / nested virtualisation on the controller, `-no-window -gpu off`, and the AVD plus system image cached rather than re-downloaded every run. | a green `connectedAndroidTest` stage |
+| ~~1~~ | ~~Run a headless Android emulator in Jenkins so `connectedAndroidTest` can take over the "manual on-device" checks below. Needs KVM / nested virtualisation on the controller, `-no-window -gpu off`, and the AVD plus system image cached rather than re-downloaded every run.~~ — done: the matrix runs API 34-36, all 9 tests each, all enforced | build #40: 27/27 passed, `tested:[api34 api35 api36] known-failing:[]` |
 | 2 | JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand — no Android imports) | `testDebugUnitTest` |
 | 3 | Convert leaf classes mechanically | tests stay green |
 | 4 | `Player` hierarchy → `Game` / `ComputerPlayer` | tests + review |
@@ -13,7 +13,7 @@ Java-to-Kotlin migration.
 | 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
-| 9 | Make the app's activities launch on API 37, then promote it from known-failing to enforced in the Jenkins matrix — detail below | a green api37 row in the emulator matrix |
+| 9 | ~~Make the app's activities launch on API 37, then promote it from known-failing to enforced in the Jenkins matrix~~ — cannot be done on this controller. The platform was ruled out: no published 37.x x86_64 image can either install the app or finish booting. Dropped from the matrix rather than left failing. Detail below. | re-add it when Google ships a working image |
 
 ## Messaging
 
@@ -47,7 +47,7 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 
 ## API 37
 
-The Jenkins matrix runs the same APK on API 34-36. **API 37 has been dropped from the matrix**: every published 37.x x86_64 image fails on this controller, for reasons that are not about the app. It cost roughly 30 minutes of boot polling per build to confirm that, so the level is out rather than left parked as known-failing. The matrix entry to restore is `37:37.2:google_apis_ps16k`.
+The Jenkins matrix runs the same APK on API 34-36, 9 tests per level: 3 in `MainLaunchTest` and 6 in `PenaltyStackTest`. **API 37 has been dropped from the matrix**: every published 37.x x86_64 image fails on this controller, for reasons that are not about the app. It cost roughly 30 minutes of boot polling per build to confirm that, so the level is out rather than left parked as known-failing. The matrix entry to restore is `37:37.2:google_apis_ps16k`.
 
 **Three earlier diagnoses for this were wrong and are retracted.** All three were artifacts of when or how the device was asked, not of the app:
 
@@ -71,8 +71,8 @@ I/Watchdog: Pausing of HandlerChecker: monitor thread for reason:
 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
-| 37.2 tried, also unusable | `system-images;android-37.2;google_apis_ps16k;x86_64` gave 176 restarts and never settled inside the boot window. Its device log shows clean service initialisation and **no** crash, OOM or `persistent_data_block` error at all — it simply never gets past boot. So it fails differently from 37.0, and neither image works. | build #39: `known-failing:[api37-37.2-google_apis_ps16k]`, 34-36 all 9/9 |
-| Dropped from the matrix | With no working image, api37 is out of the `for entry` list and `KNOWN_FAILING` is empty, so 34-36 all gate. Every level that runs is enforced again. | a build showing `tested:[api34 api35 api36] known-failing:[]` |
+| ~~37.2 tried, also unusable~~ | ~~`system-images;android-37.2;google_apis_ps16k;x86_64` gave 176 restarts and never settled inside the boot window. Its device log shows clean service initialisation and **no** crash, OOM or `persistent_data_block` error at all — it simply never gets past boot.~~ Fails differently from 37.0, and neither image works. | build #39: `known-failing:[api37-37.2-google_apis_ps16k]`, 34-36 all 9/9 |
+| ~~Dropped from the matrix~~ | ~~api37 is out of the `for entry` list and `KNOWN_FAILING` is empty, so 34-36 all gate. Every level that runs is enforced again.~~ | build #40: `tested:[api34 api35 api36] known-failing:[]`, 27/27 passed |
 | Images not yet tried | 37.1 `_ps16k`, and 37.0's other flavours (`google_apis_playstore`, `google_apis_playstore_ps16k`). Both were left alone deliberately: 37.2 showed the problem is not confined to one image, so each further attempt is ~30 min for a result that will probably be the same. Worth trying if a report says Google shipped an image fix. | a tag whose install commits |
 | No AOSP fallback | `system-images;android-37.*;default;x86_64` is **not published for any 37.x**. An earlier note here named it as the obvious candidate; that was wrong and it was never available. | a published tag in `sdkmanager --list` |
 | Restore api37 when one works | Add `37:37.2:google_apis_ps16k` back to the matrix. It will be enforced automatically, since `KNOWN_FAILING` is empty. `MainLaunchTest` must pass, not merely the install. | a green api37 row in the emulator matrix |

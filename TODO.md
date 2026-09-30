@@ -5,7 +5,7 @@ Java-to-Kotlin migration.
 | Stage | Work | Verifiable by |
 | --- | --- | --- |
 | ~~0~~ | ~~Add Kotlin plugin to `app/build.gradle` only, no source changes~~ | ~~one CI compile~~ |
-| ~~1~~ | ~~Run a headless Android emulator in Jenkins so `connectedAndroidTest` can take over the "manual on-device" checks below. Needs KVM / nested virtualisation on the controller, `-no-window -gpu off`, and the AVD plus system image cached rather than re-downloaded every run.~~ — done: the matrix runs API 34-36, all 9 tests each, all enforced | build #40: 27/27 passed, `tested:[api34 api35 api36] known-failing:[]` |
+| ~~1~~ | ~~Run a headless Android emulator in Jenkins so `connectedAndroidTest` can take over the "manual on-device" checks below. Needs KVM / nested virtualisation on the controller, `-no-window -gpu off`, and the AVD plus system image cached rather than re-downloaded every run. — done: the matrix runs API 34-36, all 9 tests each, all enforced~~ | ~~build #40: 27/27 passed, `tested:[api34 api35 api36] known-failing:[]`~~ |
 | ~~2~~ | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand)~~ — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM. | build #43: 114/114 passed, full pipeline green |
 | 3 | Convert leaf classes mechanically | tests stay green |
 | 4 | `Player` hierarchy → `Game` / `ComputerPlayer` | tests + review |

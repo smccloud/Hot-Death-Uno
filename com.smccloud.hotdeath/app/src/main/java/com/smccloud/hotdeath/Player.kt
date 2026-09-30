@@ -316,7 +316,7 @@ open class Player
 		val nLastDrawn = o.getInt("lastDrawn")
 		if (nLastDrawn != -1)
 		{
-			m_lastDrawn = g.getDeck().getCard(nLastDrawn)
+			m_lastDrawn = g.getDeck()!!.getCard(nLastDrawn)
 		}
 		else
 		{

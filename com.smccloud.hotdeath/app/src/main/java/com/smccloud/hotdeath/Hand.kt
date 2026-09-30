@@ -42,7 +42,11 @@ class Hand
 		m_cards = arrayOfNulls<Card>(Game.MAX_NUM_CARDS)
 	}
 
-	constructor(o: JSONObject, p: Player?, d: CardDeck)
+	// d is nullable only because Game.getDeck() honestly reports that the plain
+	// constructor leaves the deck null until resetRound() builds one, and this
+	// constructor is called straight off the resuming Game. The `!!` inside the
+	// loop throws exactly where the Java would have thrown on d.getCard(...).
+	constructor(o: JSONObject, p: Player?, d: CardDeck?)
 	{
 		m_player = p
 		m_numCards = 0
@@ -54,7 +58,7 @@ class Hand
 		{
 			// A bad deck index gives a null card, and the Java handed that null
 			// straight to addCard, which threw on the setHand. Same here.
-			this.addCard (d.getCard(a.getInt(i))!!)
+			this.addCard (d!!.getCard(a.getInt(i))!!)
 		}
 	}
 

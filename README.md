@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.2.164 (`versionCode` 1002164) |
+| Current version | 1.3.0 (`versionCode` 1003000) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
@@ -276,12 +276,18 @@ needs a device or emulator). A tracked `Jenkinsfile` runs both: unit tests, lint
 `assembleDebug`, `assembleRelease`, then `connectedAndroidTest` on a headless
 emulator at API 34, 35 and 36.
 
-The release APK is the published artifact, and it is currently **signed with the
-debug key** because the project has no release keystore — an unsigned APK cannot be
-installed. `app/build.gradle` carries a comment saying so at the `signingConfig`
-line. One more thing the pipeline does not cover: `connectedAndroidTest` runs
-against the debug APK, so the R8-minified release build is assembled and archived
-but never exercised on a device.
+The release APK is the published artifact, and since 1.2.0 it is **signed with the
+project's release certificate** rather than the debug key. The key itself is not in
+the repository: `app/build.gradle` reads `keystore.properties` when that file is
+present and falls back to the debug key when it is not, so a fresh clone still
+builds something installable. CI supplies the real material from Jenkins credentials
+and the pipeline prints the signing certificate into the console log, so the key
+that signed any given artifact can be checked rather than assumed. The published
+releases are on the [GitHub releases page](https://github.com/smccloud/Hot-Death-Uno/releases).
+
+One thing the pipeline still does not cover: `connectedAndroidTest` runs against the
+debug APK, so the R8-minified release build is assembled, signed and archived but
+never exercised on a device.
 
 ---
 
@@ -304,11 +310,11 @@ but never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1002164
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1003000
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (11 Java, 5 Kotlin)
+            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (6 Java, 10 Kotlin)
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml
@@ -553,19 +559,21 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.2.164, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.3.0, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced
 the artifact — it moves by 0.0.1 per test rather than being maintained by hand — so
-`versionName` 1.2.164 means 137 unit tests plus 27 instrumented all went green.
+`versionName` 1.2.164 meant 137 unit tests plus 27 instrumented all green, which is
+still the count as of 1.3.0 — that release moved files, not tests.
 `versionCode` encodes the same three numbers as `major * 1000000 + minor * 1000 +
 patch`, which leaves three digits each for the minor and the patch.
 
-1.2.0 reset the patch to 0 and moved the minor instead. A release that adds no tests
-has no new patch number to move to, and 1.1.143 had gone out signed with the debug
-key, which Android refuses to replace with a differently signed build at the same
-`versionCode` — so the minor carries releases until the test count moves again.
+1.2.0 reset the patch to 0 and moved the minor instead, and 1.3.0 did the same. A
+release that adds no tests has no new patch number to move to, and 1.1.143 had gone
+out signed with the debug key, which Android refuses to replace with a differently
+signed build at the same `versionCode` — so the minor carries releases until the test
+count moves again.
 
 See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
 and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.

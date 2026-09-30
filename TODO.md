@@ -13,6 +13,7 @@ Java-to-Kotlin migration.
 | 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
+| 9 | Make the app's activities launch on API 37, then promote it from known-failing to enforced in the Jenkins matrix — detail below | a green api37 row in the emulator matrix |
 
 ## Messaging
 
@@ -43,4 +44,14 @@ Penalty messages are built in `Game.assessPenalty` and shown with `promptUser`.
 | --- | --- | --- |
 | Keep improving the AI | Hoard a wild instead of spending it on the first legal play, keep count of what each opponent is likely to be holding, and lead the colour the hand is weakest in. | play at Expert against Pushover |
 | Fourth seat shares player 2's settings | `ComputerPlayer` reads `getP2Agg` / `getP2Skill` for the 4th computer seat, because `GameOptions` only exposes P1-P3. Settle whether that is deliberate; if not, the South seat is not independently tunable. | inspect the 4-computer-seat option |
+
+## API 37
+
+The Jenkins matrix runs the same APK on API 34-37. 34, 35, and 36 launch `Main` fine; API 37 refuses to launch any of the app's activities, so it is currently a known-failing level (reported and archived, not enforced).
+
+| Item | Work | Verifiable by |
+| --- | --- | --- |
+| Activity won't resolve | `am start -n com.smccloud.hotdeath/.Main` fails with `Activity class does not exist` on API 37, even on a healthy image where Settings launches. `Main` is `classes3.dex`, `exported=true`, MAIN/LAUNCHER filter registered; `pm enable` and forced dex compilation don't help. The app targets SDK 36 and has never been validated on Android 17. | `am start -n com.smccloud.hotdeath/.Main` succeeds |
+| Ruling out the image | Before sinking time into the app, test `system-images;android-37.0;default;x86_64`: if the AOSP image launches the app, the `google_apis` 37.0 image is the culprit and a different tag is the fix. | launching on the AOSP image |
+| Promote back to enforced | Once `MainLaunchTest` passes on 37, remove `37` from `KNOWN_FAILING` in the `Jenkinsfile` so it starts gating again. | a green api37 row in the emulator matrix |
 

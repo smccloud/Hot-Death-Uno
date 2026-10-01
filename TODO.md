@@ -2,7 +2,7 @@
 
 Java-to-Kotlin migration.
 
-**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. Six of the eight app classes referenced here — `Card`, `CardDeck`, `ComputerPlayer`, `Game`, `Hand`, `Player` — are now `.kt`, and every line number in them has moved, so grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical. `CardImageAdapter` and `GameTable` are still Java, so their references are still live.
+**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. Seven of the eight app classes referenced here — `Card`, `CardDeck`, `ComputerPlayer`, `Game`, `GameTable`, `Hand`, `Player` — are now `.kt`, and every line number in them has moved, so grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical. `CardImageAdapter` is still Java, so its references are still live.
 
 | Stage | Work | Verifiable by |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Java-to-Kotlin migration.
 | ~~2~~ | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand) — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM.~~ | ~~build #43: 114/114 passed, full pipeline green~~ |
 | ~~3~~ | ~~Convert leaf classes mechanically — `Card`, `CardDeck`, `CardPile`, `Penalty`, `GameOptions` are Kotlin. `Hand` was recorded here as unable to be converted, because it calls the package-private `Game.checkCard` and "Kotlin cannot see a Java package-private member from another file". **That was wrong, and stage 4 converted it** — see the section below.~~ | ~~build #60: 164/164 passed, full pipeline green~~ |
 | ~~4~~ | ~~`Player` hierarchy → `Game` — `Player`, `HumanPlayer`, `ComputerPlayer`, `Hand` and `Game` are all Kotlin. Every class that is not an Android view is Kotlin now; the six files still in Java are exactly stage 5's list. Two visibility widenings were forced (`Player.drawCard`, `Game.checkCard`) because Kotlin has no package-private and `internal` mangles the JVM name. Nullability is the part that would have shipped as a runtime failure. Detail below.~~ | ~~build #63: 164/164 passed, full pipeline green; re-verified on #69, 167/167, once the round loop had a test~~ |
-| 5 | Android UI last — the six remaining Java files: `GameTable`, `GameActivity`, `Main`, `Prefs`, `CardImageAdapter`, `TapDismissableDialog` | manual on-device |
+| 5 | Android UI last — `GameTable` is Kotlin as of build #71, so the five remaining Java files are: `GameActivity`, `Main`, `Prefs`, `CardImageAdapter`, `TapDismissableDialog` | manual on-device |
 | 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
@@ -57,6 +57,38 @@ The rest of `Game`'s old package-private members are `internal`, which keeps the
 `Game.kt` was written before any of this could run it, so it was checked structurally against the Java it replaced — 73 of 73 methods carried over, the sequence of `R.string` references **identical** at 47 of 47, the sequence of `Card.ID_*` references **identical** at 254 of 254, and every `m_*` assignment accounted for, the only differences being five fields that moved to Kotlin declaration-site initialisers and three the Java wrote in a constructor. Kotlin's `==` calls `equals()` where Java's `==` is identity, and no class overrides `equals` — checked across every source file — so the reference comparisons in `sortHand`, `advanceRound` and `getNextPlayer` still mean what they meant.
 
 That argued nothing was dropped. It is not the same as playing a game, which is what the next section is about.
+
+## GameTable, in Kotlin — stage 5, one file in
+
+`GameTable.java`, 1,935 lines, converted in build #71/#72. It is the largest of stage 5's six files and by a wide margin the one holding the most of the app's behaviour: the whole board is drawn by hand on a `Canvas`, there is no layout XML for any of it, and `onSizeChanged` computes the geometry for all of it. Five Java files remain — `GameActivity`, `Main`, `Prefs`, `CardImageAdapter`, `TapDismissableDialog`.
+
+**Every method name kept its Java spelling, capitalisation included.** `RedrawTable`, `ShowCardHelp`, `Toast`, `PromptForVictim`, `PromptForNumCardsToDeal` and `PromptForColor` all read as lowerCamelCase now, and six of the seven are called only from `Game.kt`. Renaming them would have put a second file in the diff for a conversion whose whole claim is that it moved a file and changed nothing else. This is stage 3's "every getter stays a function" rule extended to a whole class, and it is why `Game.kt` and `GameActivity.java` are untouched in the diff.
+
+The one name that genuinely could not stay is **`Toast`**, which collides with `android.widget.Toast`. The import is dropped and the class is written out in full at the two places it is needed — a qualified package name cannot be shadowed by a member, where `Toast.makeText` would be.
+
+`m_game` and `m_go` are nullable, and every dereference is an explicit `!!`, because `shutdown()` nulls both. Same bargain as `Game.m_penalty`: the Java threw a `NullPointerException` on a table whose activity had gone away, and `!!` throws it in the same place rather than papering over it.
+
+`getCardByID`, `getCardBitmap` return nullable because they are `HashMap.get` and the Java already returned null. `getCardImageID` and `getCardHelpText` are the exception — they unboxed, so a missing card threw, and `!!` keeps it throwing rather than inventing a `-1`. `getCardIDs` returns `Array<Int?>`, which is `Integer[]` on the JVM, so `CardImageAdapter.java` is unaffected.
+
+### Three things that were not transliterations
+
+**The two pile loops had to become `while`.** Both rewrite their own counter: on the last pass the body snaps `i` to the index of the top card, and the trailing `i += skip` then steps past it and ends the loop. Kotlin's `for` cannot reassign its counter, and reordering it to make it a `for` would silently drop the top card — which is the one card in the discard pile a player can actually see.
+
+**Java widens `int` to `float` and to `double`; Kotlin widens `int` literals to neither — only to the integral types.** This produced two errors and one near-miss in the same commit. The seven `setTranslate` calls pass `Point.x`, an `Int` field, into a `float` parameter: those need `.toFloat()`. `Card(..., 0)` passes `0` for a `Double` multiplier: that needs `0.0`, and it is the only one of its kind in the file. But `postDelayed(task, 1000)` and `vibrate(100)` are correct **untouched**, because `Long` *is* in the integer-literal type list — which is why `Game.kt`'s existing `Thread.sleep(100)` was always fine. The rule is not "Kotlin does not widen literals", it is "literals widen to the integral types only".
+
+**`Runnable { ... }` does not parse.** `kotlin.Runnable` is a SAM interface with no companion object, so there is no constructor to call and the name resolves as a reference to the interface. It has to be `object : Runnable { override fun run() { ... } }`, which is the closer translation anyway — the Java had an anonymous inner class. The syntax error cascaded into four spurious "actual type is `Unit` but `Runnable` was expected" errors at every `removeCallbacks` and `postDelayed`.
+
+### What the checks caught, and what they did not
+
+Build #70 failed on the two type errors above in 14 seconds. The structural checks had all passed first, which is the point worth recording: **the ordered-sequence diff does not catch a type error.** The reference counts were identical with `Runnable { }` and with `Card(..., 0)` still in place, because neither changes which resource or constant the file names. Checking that every `R.string`, `R.drawable` and `const val` the Kotlin refers to *exists* is a different and stronger check, and it is what caught the real mistake:
+
+While transcribing I had "corrected" three help-text lookups to colour-specific strings — `cardhelp_green_s_double`, `cardhelp_green_r_skip`, `cardhelp_yellow_r_skip` — on the reasonable reading that a green card should show green's text. The Java uses the generic `cardhelp_s_double` and `cardhelp_r_skip` for all three colours, and none of the colour-specific strings exist in `strings.xml` at all. That one would have failed the build for a different reason entirely, and it is the same shape as the "improvement" that stages 3 and 4 had to resist.
+
+What was verified before the build ran: 37 of 37 methods carried over, the only two absent being the anonymous inner classes that became a `Runnable` object and three `OnClickListener` lambdas; ordered `R.drawable` **identical** at 207 of 207, `R.string` at 95 of 95, `Card.ID_*` at 498 of 498, `Card.COLOR_*` at 111 of 111, `Game.SEAT_*` at 122 of 122, `Card.VAL_*` at 30 of 30; all 122 `decodeResource` calls; 81 card IDs, 81 `m_cardLookup` entries, 84 image-ID and image lookups, 87 help-string lookups.
+
+| Item | Work | Verifiable by |
+| --- | --- | --- |
+| ~~Convert `GameTable`~~ | ~~1,935 lines, mechanical, `m_` names and method names untouched. `m_game`/`m_go` nullable with `!!`. `Toast` collides with `android.widget.Toast` and is qualified. The two pile loops became `while`; seven `setTranslate` calls needed `.toFloat()`; one `Card(..., 0)` needed `0.0`; the `Runnable` became an object expression. Three phantom colour-specific help strings reverted to the generic ones the Java used.~~ | build #71 build-only green, #72 green: 140 unit + 27 instrumented = 167, `tested:[api34 api35 api36] skipped:[] failed:[]` |
 
 ## Driving the round loop, and the bug that was not one
 

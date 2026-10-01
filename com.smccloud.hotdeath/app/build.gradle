@@ -78,9 +78,13 @@ android {
         // the next reader assume 1.4.1 means "one more test than 1.4.0", which it
         // does not. versionCode still has to increase -- Android refuses to install
         // a build over the same one, signed or not.
-        versionCode 1004001
+        //
+        // 1.4.2 converts TapDismissableDialog, the smallest of the remaining four.
+        // Same deal on tests: it is a Dialog with one override, and nothing in the
+        // suite constructs one.
+        versionCode 1004002
 
-        versionName "1.4.1"
+        versionName "1.4.2"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

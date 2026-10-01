@@ -21,19 +21,28 @@
 // plugin -- mandatory for a "script from SCM" job to exist at all.
 properties([[$class: 'BuildDiscarderProperty',
               strategy: [$class: 'LogRotator', numToKeepStr: '10']],
-             // Build first, test second. RUN_TESTS=false stops after the signed
-             // release APK exists: no unit tests, no lint, no emulator, no JUnit
-             // report. That is deliberate and temporary -- it exists so a
-             // toolchain change (the Gradle 8.13 -> 9.5.0 bump) can be shown to
-             // build and sign on its own, instead of being reported as a failure
-             // of a half-hour emulator matrix. Flip it to true once the build
-             // stage is green. Left defaulting to false so a build that starts
-             // green does not go red on the matrix while that is being proved.
+             // Build first, then test. RUN_TESTS=false stops once the signed
+             // release APK exists: no unit tests, no lint, no emulator, no
+             // JUnit report.
+             //
+             // This was introduced defaulted to false, so the Gradle 8.13 ->
+             // 9.5.0 bump could be shown to build and sign on its own rather
+             // than being reported as a failure of a half-hour emulator matrix.
+             // Build #66 did exactly that: Gradle 9.5.0 fetched and checksum
+             // verified, both variants assembled, release signed with the real
+             // key, artifacts archived, about 100 seconds, no test stages.
+             //
+             // So it is now defaulted to true and the matrix runs again. The
+             // parameter stays rather than being removed: it is the switch that
+             // separates "does it build" from "does it pass", which is worth
+             // having on the next toolchain change, and it is the only way to
+             // get a signed artifact out when the matrix is the thing that is
+             // broken.
              [$class: 'ParametersDefinitionProperty',
               parameterDefinitions: [
                 [$class: 'BooleanParameterDefinition',
                  name: 'RUN_TESTS',
-                 defaultValue: false,
+                 defaultValue: true,
                  description: 'Run unit tests, lint, and the API 34-36 emulator matrix. Off = build and sign only.']
               ]]])
 

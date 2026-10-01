@@ -137,13 +137,31 @@ abstract class VerifyVersionCode extends DefaultTask {
             }
         }
 
-        if (declaredCode <= highest.code) {
+        // Going backwards is the bug this exists to catch: it cannot install at
+        // all, and nobody can fix it by signing differently. Failing hard.
+        if (declaredCode < highest.code) {
             throw new GradleException(
-                "versionCode ${declaredCode} (${declaredName}) must be strictly greater " +
-                "than ${highest.code} (${highestTag}, ${highest.name}).\n" +
-                "Android refuses to install this over the published build, and refuses " +
-                'to replace one signed with a different key at the same versionCode.\n' +
+                "versionCode ${declaredCode} (${declaredName}) is lower than " +
+                "${highest.code} (${highestTag}, ${highest.name}).\n" +
+                "Android refuses to install a build whose versionCode is not higher than the " +
+                'one already installed, so this artifact can never be installed.\n' +
                 'Bump the minor or the patch in appVersion near the top of this file.')
+        }
+
+        // Equal is normal and is only a problem at the moment of publishing, so
+        // it is reported rather than enforced. Every commit after a release sits
+        // here until someone bumps the patch -- a README fix, a log message, an
+        // empty commit -- and failing those would leave main permanently red and
+        // teach people to ignore this task, which is how the original problem
+        // went unnoticed in the first place. A tag on HEAD is handled above and
+        // never reaches here, so this line means "working past an untagged
+        // release". The bump before tagging is the human's half of the check.
+        if (declaredCode == highest.code) {
+            logger.lifecycle("verifyVersionCode: ${declaredCode} (${declaredName}) == " +
+                "${highest.code} (${highestTag}, ${highest.name}). OK for development, but a " +
+                "build of this version will not install over ${highestTag}, so bump the patch " +
+                "in appVersion before tagging it.")
+            return
         }
 
         logger.lifecycle("verifyVersionCode: ${declaredCode} (${declaredName}) > " +
@@ -213,9 +231,12 @@ if (hasReleaseKeystore) {
 // is not strictly greater than the one already installed, and refuses to
 // replace a build signed with a different key at the same versionCode. So
 // versionCode must increase on every release even when nothing else did.
-// `gradle verifyVersionCode` checks that against the highest existing tag, and
-// the Jenkinsfile runs it before the release build; the check used to be
-// documentation and is now a gate.
+// `gradle verifyVersionCode` compares against the highest existing tag, and the
+// Jenkinsfile runs it before the release build; the check used to be
+// documentation and is now a gate. It fails only when the versionCode has gone
+// backwards, and warns when it merely matches the last release -- which is the
+// state of every commit between two releases. Bumping the patch before tagging
+// is the part the task cannot do for you.
 //
 // The patch has three digits, so it runs out at 999. Bump the minor and reset
 // the patch to 0 when it gets close. The minor has three digits too, for the
@@ -382,6 +403,13 @@ dependencies {
 // declares 1.4.6 would make the release commit fail its own check -- 1004006
 // against 1004006 -- and the pipeline would go red on the tagged build that is
 // supposed to be the good one.
+//
+// Only a strictly lower versionCode fails. Declaring exactly the published code
+// is what every commit between one release and the next looks like, so enforcing
+// strict inequality would turn this into a build that is red on main until
+// someone remembers to bump -- the sort of gate people learn to route around,
+// which is how the versionCode went unchecked in the first place. Equality is
+// logged as the warning it is: fine to develop on, not something to publish.
 //
 // Deliberately not wired into `check`. It reads git, so it needs a checkout that
 // has the tags -- a source-archive export and a shallow clone have neither, and

@@ -336,6 +336,28 @@ node {
     echo "gradle=${gradleHome}"
   }
 
+  // Ahead of Signing material, and not merely for tidiness. Everything after
+  // this stage writes a plaintext keystore password into the workspace, and the
+  // teardown at the end of this pipeline only runs when the pipeline succeeds --
+  // a failed build leaves it on disk until the next run, which the teardown's
+  // own comment concedes. This check can fail, and there is no reason for it to
+  // be able to do that: the failure mode of a wrong versionCode is an APK that
+  // will not install, and that is worth deciding before a plaintext password
+  // file exists rather than after.
+  //
+  // Here rather than earlier because it needs gradleHome, and here rather than
+  // immediately before Assemble release because it costs about a second against
+  // a compile that costs tens of seconds. It reads git only, so it needs no SDK
+  // of its own -- though the AGP configuration phase still does, hence the
+  // withEnv.
+  stage('Version check') {
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh "${gradleHome} ${gradleArgs} verifyVersionCode"
+      }
+    }
+  }
+
   // AGP reads ANDROID_HOME, so local.properties is unnecessary -- which is what
   // we want, since it is gitignored and holds a machine-specific SDK path.
   //
@@ -500,24 +522,6 @@ node {
         throw err
       }
       echo 'WARNING: no signing credentials on this controller -- the release APK will be debug-signed'
-    }
-  }
-
-  // Before Assemble release, and for the same reason: it costs a second, and it
-  // is the last point at which a wrong versionCode is cheap. Android refuses to
-  // install a build whose versionCode is not strictly greater than the one
-  // already installed, and refuses to replace one signed with a different key
-  // at the same versionCode -- neither of which is visible until someone tries
-  // the install on a device. The task compares app/build.gradle's declared
-  // version against the highest published v* tag and fails if it has not moved
-  // past it. Its own build.gradle comment says why it is not wired into
-  // `check`: it needs the tags, and the only builds here that matter are the
-  // release ones.
-  stage('Version check') {
-    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
-      dir(moduleDir) {
-        sh "${gradleHome} ${gradleArgs} verifyVersionCode"
-      }
     }
   }
 

@@ -560,14 +560,16 @@ Tracked as GitHub issues, so they have somewhere to be discussed and closed:
   happened on a small table — [#4](https://github.com/smccloud/Hot-Death-Uno/issues/4)
 - An optional novice mode that taps to advance after each card played — [#5](https://github.com/smccloud/Hot-Death-Uno/issues/5)
 - Continuing AI improvements — [#6](https://github.com/smccloud/Hot-Death-Uno/issues/6)
-
-Still only prose here, not filed yet:
-
-- Scan additional card backgrounds for more realism.
+- Scan additional card backgrounds for more realism — [#9](https://github.com/smccloud/Hot-Death-Uno/issues/9)
 - Unresolved rules questions: whether the 1,000-point penalty needs Quitter +
   Retaliation or also Big Brother; whether Draw 2 may be stacked; whether Retaliation
   applies against Draw 2; and whether the dealer eats penalties on the first face-up
   card. The last of these has a `FIXME` at the top of `Game.postDealHands`.
+  — [#10](https://github.com/smccloud/Hot-Death-Uno/issues/10), which records what the
+  code currently does for each of the four
+
+The full list of what was converted from `TODO.md`, and the reasoning for grouping it,
+is in the commit message for [`5403f01`](https://github.com/smccloud/Hot-Death-Uno/commit/5403f01).
 
 ---
 

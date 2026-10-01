@@ -95,6 +95,62 @@ node {
     }
   }
 
+  // Wipe the workspace before checking anything out, because this job's SCM
+  // config does not pin clean-before-checkout and without this every run
+  // inherits the last run's build/ directory.
+  //
+  // That is not just untidy, it hides things. Gradle then reports most tasks
+  // up-to-date and never re-runs them, so a change that ought to be recompiled
+  // can be skipped and the build still reports SUCCESS. Build #67 is the
+  // example: 34 of 34 actions up-to-date on assembleDebug, and the release APK
+  // archived was the one #66 had produced. Nothing was wrong with it, but the
+  // build was not evidence of anything either.
+  //
+  // Deliberately the first stage and not a teardown stage. Cleaning on the way
+  // out means a failed build leaves its residue for the next one to trip over,
+  // which is the case that actually matters. Cleaning on the way in means the
+  // worst a crash can leave behind is a half-deleted tree, which the next run
+  // finishes deleting anyway.
+  //
+  // The expensive things are not in the workspace and are not touched: the
+  // Gradle distribution, the Android SDK, the AVDs and the system images all
+  // live under $JENKINS_HOME/.toolcache/hotdeath, and the dependency cache is
+  // in the Gradle user home outside the tree. So this costs a full recompile and
+  // a full R8 pass -- tens of seconds -- and keeps the downloads.
+  stage('Workspace cleanup') {
+    sh '''
+      set -eu
+      # Refuse to delete anything unless we really are in a workspace. A stage
+      # that silently rm -rf'd the wrong directory would be far worse than a
+      # build that fails, and $WORKSPACE being empty is exactly the case where
+      # "." would otherwise be something alarming.
+      #
+      # Exact matches only, no trailing glob. The workspace on this controller
+      # is /var/lib/jenkins/workspace/Hot-Death-Uno, so a "/var/lib/jenkins/"*
+      # pattern matches the one directory that is safe to clean and the stage
+      # refuses to run on every build.
+      case "$WORKSPACE" in
+        ""|"/"|"/var/lib/jenkins"|"/var/lib/jenkins/")
+          echo "refusing to clean: WORKSPACE is '$WORKSPACE'" >&2
+          exit 1
+          ;;
+      esac
+      echo "workspace: $WORKSPACE"
+      BEFORE=$(du -sh . 2>/dev/null | awk '{print $1}' || echo '?')
+      echo "before cleanup: $BEFORE"
+      find . -mindepth 1 -maxdepth 1 -print | cut -c3- | sort >&2 || true
+      # -exec rm -rf rather than rm -rf ./* : the glob does not match dotfiles
+      # and fails outright on an empty directory.
+      find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+      LEFT=$(find . -mindepth 1 -maxdepth 1 | wc -l)
+      echo "after cleanup: $LEFT entries remain"
+      if [ "$LEFT" != '0' ]; then
+        echo "ERROR: workspace is not empty after cleanup" >&2
+        exit 1
+      fi
+    '''
+  }
+
   stage('Checkout') {
     checkout scm
   }

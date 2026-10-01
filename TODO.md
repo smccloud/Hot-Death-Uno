@@ -2,7 +2,7 @@
 
 Java-to-Kotlin migration.
 
-**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. Eight of the ten app classes referenced here — `Card`, `CardDeck`, `ComputerPlayer`, `Game`, `GameActivity`, `GameTable`, `Hand`, `Player`, `TapDismissableDialog` — are now `.kt`, and every line number in them has moved, so grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical. `CardImageAdapter` is still Java, so its references are still live.
+**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. All ten app classes referenced here are now `.kt` — the migration finished at 1.4.5 — so every one of these line numbers is historical and grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical.
 
 | Stage | Work | Verifiable by |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Java-to-Kotlin migration.
 | ~~2~~ | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand) — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM.~~ | ~~build #43: 114/114 passed, full pipeline green~~ |
 | ~~3~~ | ~~Convert leaf classes mechanically — `Card`, `CardDeck`, `CardPile`, `Penalty`, `GameOptions` are Kotlin. `Hand` was recorded here as unable to be converted, because it calls the package-private `Game.checkCard` and "Kotlin cannot see a Java package-private member from another file". **That was wrong, and stage 4 converted it** — see the section below.~~ | ~~build #60: 164/164 passed, full pipeline green~~ |
 | ~~4~~ | ~~`Player` hierarchy → `Game` — `Player`, `HumanPlayer`, `ComputerPlayer`, `Hand` and `Game` are all Kotlin. Every class that is not an Android view is Kotlin now; the six files still in Java are exactly stage 5's list. Two visibility widenings were forced (`Player.drawCard`, `Game.checkCard`) because Kotlin has no package-private and `internal` mangles the JVM name. Nullability is the part that would have shipped as a runtime failure. Detail below.~~ | ~~build #63: 164/164 passed, full pipeline green; re-verified on #69, 167/167, once the round loop had a test~~ |
-| 5 | Android UI — three files left as of 1.4.2: `CardImageAdapter`, `Prefs`, `Main`. Done so far: `GameTable` (#71), `GameActivity` (#82, released as 1.4.1), `TapDismissableDialog` (#85, released as 1.4.2) | manual on-device |
+| 5 | ~~Android UI~~ — **done, build #94.** `GameTable` (#71, 1.4.0), `GameActivity` (#82, 1.4.1), `TapDismissableDialog` (#85, 1.4.2), `CardImageAdapter` (#88, 1.4.3), `Prefs` (#91, 1.4.4), `Main` (#94, 1.4.5). **The app is 16 Kotlin files with no Java source left.** The test suite is deliberately still Java — see below | play a few rounds on 1.4.5 |
 | 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
@@ -92,7 +92,7 @@ What was verified before the build ran: 37 of 37 methods carried over, the only 
 
 ## GameActivity and TapDismissableDialog, in Kotlin
 
-Two more of stage 5's six, released as 1.4.1 and 1.4.2. Three Java files left: `CardImageAdapter`, `Prefs`, `Main`. Nothing outside those two commits had to change — `Game.kt`, `GameTable.kt`, `CardImageAdapter.java`, `Main.java` and the whole test suite are untouched by both.
+Two of stage 5's six, released as 1.4.1 and 1.4.2. **`Game.kt` and `GameTable.kt` are untouched by both.**
 
 **`GameActivity` is constrained by reflection, and that shaped the whole file.** `GameRoundLoopTest` builds the activity with `buildActivity().get()` — so `onCreate` never runs and the game thread never starts — and then sets seven fields by name: `m_go`, `m_game`, `m_gt`, `m_btnFastForward`, `m_vMenuPanel`, `m_btnMenuDraw`, `m_btnMenuPass`. Every name has to survive, and every field has to be nullable: a nullable Kotlin property is still a plain field of the same name on the JVM (`GameOptions?` is `GameOptions`, not `Optional`), so `Field.set` is unaffected, and `onDestroy` nulls three of them anyway. The test exists precisely so that a rename fails loudly rather than as an NPE.
 
@@ -108,6 +108,27 @@ The three `findViewById` calls spell out their type argument. Inference would ha
 | --- | --- | --- |
 | ~~Convert `GameActivity`~~ | ~~366 lines. Seven reflected field names and types preserved, all nullable. `getBtnFastForward` returns non-null with `!!` inside. Four `setTextColor` literals given `.toInt()`. `WindowInsets` imported explicitly since the Java wildcard `android.view.*` is not a thing in Kotlin. Four anonymous inner classes became lambdas. The stray `};` after `onDestroy` is gone.~~ | build #82: 140 unit + 27 instrumented = 167, matrix green. Released as **1.4.1** |
 | ~~Convert `TapDismissableDialog`~~ | ~~43 lines. Three package-private fields → `internal`. 7px threshold, both ACTION branches, both `Math.abs` checks and the single `dismiss()` in the same order.~~ | build #85: 167 passed, matrix green, and the first run on the renamed AVDs. Released as **1.4.2** |
+| ~~Convert `CardImageAdapter`~~ | ~~91 lines. `getView`'s `convertView` is `View?` and `parent` stays `ViewGroup`. `mContext` → `lateinit`. All five methods, all `Integer[]` → `Array<Int?>`. `GridView.LayoutParams` → `AbsListView.LayoutParams`. **This is the one that edited another file**: `GameActivity.kt` needed `!!` on one array index.~~ | build #88: 167 passed. Released as **1.4.3** |
+| ~~Convert `Prefs`~~ | ~~216 lines. Twelve static accessors and the `OPT_*` keys → companion object; they are **not** statics on the JVM, and a future Java caller would need `@JvmStatic`. Twelve `Context?` parameters. `onSharedPreferenceChanged` needs `String?`. `getCheatCode` stays `String` with `!!` inside. All 12 keys byte-identical.~~ | build #91: 167 passed. Released as **1.4.4** |
+| ~~Convert `Main`~~ | ~~162 lines, the last file. `onResume` written `public override` because the Java had widened it. `onClick` stays if/else — `R.id.*` is not a compile-time constant, so a `when` would not compile. `GameActivity.STARTUP_MODE` reachable unchanged through its companion.~~ | build #94: 167 passed, matrix green. Released as **1.4.5** |
+
+## The lesson from the last four files, in one place
+
+**A conversion can break a *Kotlin* caller without changing a byte of the binary API that Java callers see.** It happened twice, in opposite directions, and the reference-count checks caught neither:
+
+  - **`CardImageAdapter.getCardIDs()`** returned a Java `Integer[]`, which Kotlin sees as the platform type `Array<Int!>!` — assignable to `Int` without complaint. Declared `Array<Int?>`, it stopped being. `GameActivity.kt` needed `!!` on one index, and the JVM signature was byte-identical throughout.
+  - **`Prefs.get*(Context)`** was a Java static, so `Context` was a platform type and silently accepted the `GameActivity?` that `GameOptions` holds. Written as non-null Kotlin, it produced **fourteen errors, every one in `GameOptions.kt` and none in `Prefs.kt`.**
+
+Whether a conversion breaks a caller depends on whether the parameter or return happens to be *platform*-typed, and where the platform type was matters: in the first case on the returning side of the file being converted, in the second on the parameter side. Neither is visible by comparing signatures, and a checklist that only compares signatures will miss both.
+
+**Two Java spellings that do not carry over**, both hit on the first attempt:
+
+  - **`GridView.LayoutParams` does not resolve in Kotlin.** `GridView` declares no nested `LayoutParams`; it inherits `AbsListView`'s. Java resolves an inherited nested class through the subclass name, Kotlin does not.
+  - **`Runnable { ... }` does not parse** (recorded at 1.4.0). `kotlin.Runnable` is a SAM interface with no companion object, so the name resolves as a reference to the interface rather than a constructor. It needs `object : Runnable { override fun run() { ... } }`, which is the closer translation of the Java's anonymous inner class anyway. `View.OnClickListener`, `DialogInterface.OnClickListener` and `AdapterView.OnItemClickListener` *do* take SAM conversion — those are ordinary Java interfaces, not Kotlin function types.
+
+**The tests were left in Java deliberately.** A conversion that also rewrites its own tests cannot tell a migration regression from a test that changed its mind. `GameRoundLoopTest` reflects on seven `GameActivity` fields by name and stayed valid through that class being converted out from under it — which is the strongest single piece of evidence that the conversion preserved the API it was supposed to.
+
+**One bug fixed by accident, worth not rediscovering.** README lists "Main compares preference strings with `==` rather than `.equals()`" as a known bug. The Java's `==` was reference comparison that worked only because the preference default is an interned `""`. Kotlin's `==` is a value comparison and agrees with what the Java actually did on every value this can hold. Nobody fixed it on purpose. **That README entry should be struck out.**
 
 ## The configuration cache: two ways of enabling it that both did nothing
 

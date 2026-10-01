@@ -17,7 +17,7 @@ networked play.
 | Package | `com.smccloud.hotdeath` |
 | Current version | 1.4.5 (`versionCode` 1004005) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
-| Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
+| Language | Kotlin, on JDK 17 (the app is fully Kotlin as of 1.4.5; the test suite is Java; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
 | License | MIT — see [License](#license) |
 
@@ -498,8 +498,7 @@ Three behavioral changes came with the retarget:
 - **Toast durations can go negative.** `GameTable` computes the duration as
   `getDelay() - 500`, which is negative both during fast-forward (`0`) and while the
   human seat is inactive (`250`).
-- **`Main.onResume()` compares preference strings with `==`** rather than `.equals()`.
-  It happens to work because the default is a string literal.
+- ~~`Main.onResume()` compares preference strings with `==` rather than `.equals()`. It happens to work because the default is a string literal.~~ **Fixed as a side effect of the 1.4.5 Kotlin conversion.** The Java's `==` was reference comparison that only worked because the preference default is an interned `""`; Kotlin's `==` is a value comparison and agrees with what the Java did on every value this can hold. Not fixed on purpose — worth knowing so nobody re-adds a `.equals()` to "fix" it again.
 - **`Game.java.new` is a stale editor backup** that is still tracked in git. It does
   not compile (it is not a `.java` file) and should be deleted.
 

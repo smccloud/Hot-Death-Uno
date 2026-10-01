@@ -32,6 +32,12 @@ local.properties
 /jenkins-creds.xml
 /jenkins-creds
 
+# A GitHub token, stored the same way: DPAPI-encrypted to this user on this
+# machine, written by a one-liner the maintainer runs once. It needs write
+# access to releases to upload an APK to a tag, which is why it cannot be a
+# read-only token and why it is worth keeping out of git rather than in it.
+/github-creds.xml
+
 # Signing material. These must never be committed.
 *.jks
 *.keystore

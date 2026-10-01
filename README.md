@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.0 (`versionCode` 1004000) |
+| Current version | 1.4.1 (`versionCode` 1004001) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -310,11 +310,11 @@ never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004000
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004001
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (5 Java, 11 Kotlin)
+            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (4 Java, 12 Kotlin)
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml
@@ -347,7 +347,7 @@ hand-maintained and must be extended whenever a card is added.
 
 ## Architecture
 
-Sixteen classes, ~8,300 lines, no third-party libraries — five Java, eleven Kotlin.
+Sixteen classes, ~8,300 lines, no third-party libraries — four Java, twelve Kotlin.
 There is no MVP/MVVM
 layering; the game engine and the view are deliberately coupled.
 
@@ -560,7 +560,7 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.0, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.1, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced
@@ -575,6 +575,13 @@ out signed with the debug key, which Android refuses to replace with a different
 signed build at the same `versionCode` — so the minor carries releases until the test
 count moves again. 1.4.0 is the same case: it converts `GameTable` to Kotlin and adds
 no tests, so the count is still 140 + 27 and the minor is what moved.
+
+From 1.4.0 the patch stops tracking the test count and becomes a plain release
+counter within the 1.4 line — so 1.4.1 does **not** mean "one more passing test
+than 1.4.0". It is the second Kotlin conversion of stage 5 (`GameActivity`), and
+like 1.4.0 it adds no tests. The test count itself is unchanged at 140 unit plus
+27 instrumented since 1.3.167; the minor is what records a real change, and the
+patch only has to increase so Android will accept the install.
 
 See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
 and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.

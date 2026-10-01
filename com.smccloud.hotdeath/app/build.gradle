@@ -70,9 +70,17 @@ android {
         // The count is still 140 unit plus 27 instrumented, which is what 1.3.167
         // already meant -- so this release exists to carry the converted table, not
         // to announce anything the last one did not.
-        versionCode 1004000
+        //
+        // 1.4.1 converts GameActivity, the second of stage 5's six. Still 140 plus
+        // 27, so the count has not moved and the patch is no longer tracking it:
+        // from 1.4.0 the patch is just a release counter within the 1.4 line, and the
+        // minor is what records a real change. Saying so here rather than letting
+        // the next reader assume 1.4.1 means "one more test than 1.4.0", which it
+        // does not. versionCode still has to increase -- Android refuses to install
+        // a build over the same one, signed or not.
+        versionCode 1004001
 
-        versionName "1.4.0"
+        versionName "1.4.1"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

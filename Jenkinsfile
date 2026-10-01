@@ -614,15 +614,31 @@ node {
               "\$tag") flavour=google_apis ;;
             esac
             IMAGE="system-images;android-\$tag;\$flavour;x86_64"
-            # The AVD name is the cache key for the created AVD, so an image swap
-            # has to change it. A bare "api37" from the 37.0 days is still on
-            # disk, and reusing it would boot the old image while reporting the
-            # new tag's results -- the worst way to test an image swap. Only
-            # non-default images get a qualified name, so 34-36 keep the AVDs
-            # they already have instead of paying to recreate them.
-            AVD="api\$api"
+            # Every AVD is prefixed with this job's name, so two builds on the
+            # same controller cannot collide on one AVD. The AVD directory is
+            # shared state and the emulator is not -- a concurrent job booting
+            # "api36" while this one is using it would fight over the same
+            # config.ini and the same console port, and the loser fails in a way
+            # that looks like a device problem rather than a name collision.
+            #
+            # It also means the archived result directories
+            # (instrumented-results/<AVD> and failure-diagnostics/<AVD>) are
+            # unambiguous about which job wrote them.
+            #
+            # One-time cost of the rename: the AVDs have to be recreated, since
+            # avdmanager keys on the name. The system images themselves are
+            # already in the toolcache and are not re-downloaded.
+            #
+            # The name is ALSO the cache key for the created AVD, so an image
+            # swap has to change it. A bare "hot-death-uno-api37" from the 37.0
+            # days would otherwise still be on disk, and reusing it would boot
+            # the old image while reporting the new tag's results -- the worst
+            # way to test an image swap. Only non-default images get the
+            # qualified tag-flavour suffix, so 34-36 do not pay for a longer
+            # name on top of it.
+            AVD="hot-death-uno-api\$api"
             if [ "\$tag\$flavour" != "\${api}google_apis" ]; then
-              AVD="api\$api-\$tag-\$flavour"
+              AVD="hot-death-uno-api\$api-\$tag-\$flavour"
             fi
 
             enforced=yes

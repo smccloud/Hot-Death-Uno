@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.3 (`versionCode` 1004003) |
+| Current version | 1.4.4 (`versionCode` 1004004) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -310,11 +310,11 @@ never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004003
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004004
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (2 Java, 14 Kotlin)
+            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (1 Java, 15 Kotlin)
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml
@@ -347,7 +347,7 @@ hand-maintained and must be extended whenever a card is added.
 
 ## Architecture
 
-Sixteen classes, ~8,300 lines, no third-party libraries — two Java, fourteen Kotlin.
+Sixteen classes, ~8,300 lines, no third-party libraries — one Java, fifteen Kotlin.
 There is no MVP/MVVM
 layering; the game engine and the view are deliberately coupled.
 
@@ -560,7 +560,7 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.3, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.4, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced

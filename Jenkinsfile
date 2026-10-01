@@ -1076,7 +1076,7 @@ node {
                 # each end. Harmless for set --, but trim so the value is exactly
                 # "x1 y1 x2 y2" and nothing downstream has to know that.
                 sub(/^ +/, "", b)
-                sub(/ +$/, "", b)
+                sub(/ +\$/, "", b)
                 print b
               }'
           }

@@ -18,7 +18,7 @@ networked play.
 | Current version | 1.3.167 (`versionCode` 1003167) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
-| Build | Gradle 8.13 + Android Gradle Plugin 8.11.1 |
+| Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
 | License | MIT — see [License](#license) |
 
 ---
@@ -242,7 +242,7 @@ Matching is a plain `String.contains()` in `GameOptions`.
 
 - JDK 17 or newer (required by Android Gradle Plugin 8.11.1)
 - Android SDK Platform 36
-- Gradle 8.13+ (or Android Studio Meerkat and newer)
+- Gradle 9.5.0+ (or Android Studio Meerkat and newer)
 
 ### With Android Studio
 
@@ -262,7 +262,7 @@ Outputs land in `com.smccloud.hotdeath/app/build/outputs/apk/`.
 ### Wrapper caveat
 
 `gradlew` and `gradlew.bat` are committed, and
-`gradle/wrapper/gradle-wrapper.properties` pins Gradle 8.13 — but
+`gradle/wrapper/gradle-wrapper.properties` pins Gradle 9.5.0 — but
 **`gradle-wrapper.jar` is still not in the repository**. `./gradlew` will fail until
 you run `gradle wrapper` once to generate it, or let Android Studio regenerate it on
 sync. There is also no `local.properties` — set `sdk.dir` to your Android SDK path, or
@@ -301,7 +301,7 @@ never exercised on a device.
     ├── build.gradle              root buildscript; AGP 8.11.1
     ├── settings.gradle           include ':app'
     ├── gradle.properties         2 GB daemon heap
-    ├── gradle/wrapper/           distributionUrl pinned to Gradle 8.13 (no JAR committed)
+    ├── gradle/wrapper/           distributionUrl pinned to Gradle 9.5.0 (no JAR committed)
     ├── proguard.cfg              legacy ProGuard rules, superseded by app/proguard-rules.pro
     ├── default.properties        vestigial Ant-era stub
     ├── gradlew, gradlew.bat      wrapper scripts

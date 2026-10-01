@@ -15,9 +15,9 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.6 (`versionCode` 1004006) |
+| Current version | 1.4.7 (`versionCode` 1004007), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
-| Language | Kotlin, on JDK 17 (the app is fully Kotlin as of 1.4.5; the test suite is Java; no third-party runtime dependencies) |
+| Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
 | License | MIT — see [License](#license) |
 
@@ -349,17 +349,26 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004006
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004007
         ├── proguard-rules.pro    R8 rules (release is minified)
-        └── src/main/
-            ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (all Kotlin)
-            └── res/
-                ├── layout/       7 XML layouts + layout-land/
-                ├── values/       strings.xml, arrays.xml, colors.xml
-                ├── xml/          preferences.xml
-                └── drawable-*/   692 PNGs, 8.3 MB across 5 density buckets
+        └── src/
+            ├── main/
+            │   ├── AndroidManifest.xml
+            │   ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (all Kotlin)
+            │   └── res/
+            │       ├── layout/       7 XML layouts + layout-land/
+            │       ├── values/       strings.xml, arrays.xml, colors.xml
+            │       ├── xml/          preferences.xml
+            │       └── drawable-*/   692 PNGs, 8.3 MB across 5 density buckets
+            ├── test/kotlin/com/smccloud/hotdeath/          140 tests, Robolectric
+            └── androidTest/kotlin/com/smccloud/hotdeath/   9 tests, needs a device
 ```
+
+Both test source sets are Kotlin and both live in a `kotlin/` directory rather
+than `java/`. Nothing in `app/build.gradle` declares them: AGP and the Kotlin
+plugin each register `src/<sourceSet>/kotlin` themselves, so moving the tests
+there needed no build change. `src/test/resources/robolectric.properties` stays
+where it is — resources are a separate source set from code.
 
 ### Artwork
 
@@ -387,8 +396,8 @@ hand-maintained and must be extended whenever a card is added.
 ## Architecture
 
 Sixteen classes, ~8,300 lines, no third-party libraries — all Kotlin. The
-Java-to-Kotlin migration finished at 1.4.5; there is no Java source left in the app.
-There is no MVP/MVVM
+Java-to-Kotlin migration finished at 1.4.5; the test suite followed at 1.4.7,
+so there is no Java source left anywhere in the repository. There is no MVP/MVVM
 layering; the game engine and the view are deliberately coupled.
 
 ```
@@ -610,14 +619,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.6, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.7, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
 minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
 than typed next to it, so the two cannot drift apart: the encoding is
 `major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
-no `versionCode` has ever had to change retroactively. 1.4.6 is 1004006.
+no `versionCode` has ever had to change retroactively. 1.4.7 is 1004007.
 
 The one hard constraint is that `versionCode` must strictly increase on every release.
 Android refuses to install a build whose code is not greater than the installed one,

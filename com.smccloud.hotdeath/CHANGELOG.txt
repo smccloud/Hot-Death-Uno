@@ -210,4 +210,42 @@ Version 1.4.6                2026-10-01
 
  - no application code changed. The test count is unchanged at 140 unit plus 9
    instrumented
-    
+     
+
+Version 1.4.7                unreleased
+
+ - the test suite is Kotlin, which finishes the 1.4.5 migration: there is no
+   Java source left anywhere in the repository. The 11 test files moved from
+   src/test/java and src/androidTest/java to the kotlin/ directories beside
+   them, which needed no build change -- AGP and the Kotlin plugin register
+   src/<sourceSet>/kotlin themselves
+
+ - the conversion was not a transliteration, and it turned up one real bug.
+   GameRoundLoopTest asserted that every card in the deck was in a hand, a
+   draw pile or the discard pile. Written the Java way it reads as
+
+       val accounted = inHands
+               + game.getDrawPile()!!.getNumCards()
+               + game.getDiscardPile()!!.getNumCards()
+
+   but Kotlin reads a line-leading + as unary plus and ends the declaration
+   there: accounted was inHands alone, so the assertion compared one pile
+   against the whole deck. It compiled without a warning. Java has no such
+   reading, so the same text meant something else in the file it came from.
+   The counts are now named and summed on one line
+
+ - where nullability actually bit was not where the issue predicted. Hand(null)
+   compiled unchanged everywhere, as expected. CardPile.getCard,
+   Hand.getCard, Hand.getLowestCard and CardDeck.getCard are all nullable, so
+   the reads inside loops needed !!, and each one now carries a comment saying
+   why the read is safe instead of a bare !!. JsonRoundTripTest documents that
+   the seat-index round trip is what makes Hand(null) legal, so tightening Hand
+   breaks one assertion rather than forty call sites
+
+ - the reflection helpers in HandPlayabilityTest and GameRoundLoopTest now say
+   out loud that f.set bypasses Kotlin's intrinsic null checks, which is why
+   the AssertionError on a renamed field is the only guard there is
+
+ - no application code changed. The test count is unchanged at 140 unit plus 9
+   instrumented
+     

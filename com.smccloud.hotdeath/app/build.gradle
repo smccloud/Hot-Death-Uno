@@ -218,14 +218,14 @@ if (hasReleaseKeystore) {
 }
 
 // Versioning: MAJOR.MINOR.PATCH, and the patch is a plain release counter
-// within the minor line. Nothing derives it from anything else -- 1.4.6 is the
-// seventh release of the 1.4 line, and 1.5.0 is the next line rather than the
+// within the minor line. Nothing derives it from anything else -- 1.4.7 is the
+// eighth release of the 1.4 line, and 1.5.0 is the next line rather than the
 // seven hundredth patch of this one.
 //
 // versionCode is computed from versionName below so the two cannot disagree:
 // major*1000000 + minor*1000 + patch. That is the encoding every published
 // version already uses, so no versionCode ever has to change retroactively --
-// 1.4.5 is still 1004005 and this release is 1.4.6 / 1004006.
+// 1.4.5 is still 1004005 and this release is 1.4.7 / 1004007.
 //
 // The one hard constraint: Android refuses to install a build whose versionCode
 // is not strictly greater than the one already installed, and refuses to
@@ -247,7 +247,7 @@ if (hasReleaseKeystore) {
 // as current as the last person to remember to update it, and by 1.4.5 it was
 // describing a test-count scheme that had been abandoned at 1.4.0 and had never
 // matched the real counts anyway. See #12.
-def appVersion = '1.4.6'
+def appVersion = '1.4.7'
 
 def appVersionParts = appVersion.tokenize('.')
 if (appVersionParts.size() != 3 || !appVersionParts.every { it ==~ /\d+/ }) {

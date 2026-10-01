@@ -174,6 +174,13 @@ node {
         if cp -a "$CC_REL" "$STASH/cc" 2>/dev/null; then
           HAD_CC=yes
           echo "stashed configuration cache: $CC_REL"
+          # What is actually in it, because "the directory survived" and "the
+          # entry survived" are different claims and only one of them was true
+          # for the first few runs. Size plus the entry files, so a miss is
+          # diagnosable from the log instead of needing a workspace that the next
+          # build is about to wipe.
+          echo "  contents: $(find "$STASH/cc" -type f | wc -l) file(s), $(du -sh "$STASH/cc" | awk '{print $1}')"
+          find "$STASH/cc" -type f -name '*.bin' -printf '  entry: %f %s bytes\n' 2>/dev/null || true
         else
           echo "WARNING: could not read $CC_REL to preserve it; carrying on without" >&2
         fi

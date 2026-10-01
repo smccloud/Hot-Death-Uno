@@ -82,9 +82,12 @@ android {
         // 1.4.2 converts TapDismissableDialog, the smallest of the remaining four.
         // Same deal on tests: it is a Dialog with one override, and nothing in the
         // suite constructs one.
-        versionCode 1004002
+        //
+        // 1.4.3 converts CardImageAdapter, the card-catalog GridView adapter. The
+        // fourth of stage 5's six; Prefs and Main are left.
+        versionCode 1004003
 
-        versionName "1.4.2"
+        versionName "1.4.3"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

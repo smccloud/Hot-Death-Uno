@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.2 (`versionCode` 1004002) |
+| Current version | 1.4.3 (`versionCode` 1004003) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -310,11 +310,11 @@ never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004002
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004003
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (3 Java, 13 Kotlin)
+            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (2 Java, 14 Kotlin)
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml
@@ -347,7 +347,7 @@ hand-maintained and must be extended whenever a card is added.
 
 ## Architecture
 
-Sixteen classes, ~8,300 lines, no third-party libraries — three Java, thirteen Kotlin.
+Sixteen classes, ~8,300 lines, no third-party libraries — two Java, fourteen Kotlin.
 There is no MVP/MVVM
 layering; the game engine and the view are deliberately coupled.
 
@@ -381,7 +381,7 @@ Main ──> GameActivity ──> GameTable (View, custom Canvas drawing)
 | **`Card`** | 343 | One card: color, value, ID, face-up flag, deck index, and the mutable scoring state (`currentValue`, `pointValue`, `pointMultiplier`, `cumulativePenalty`, `highestCardMatch`). Owns the whole card-ID constant namespace. Also holds a back-pointer to its owning `Hand`. |
 | **`CardPile`** | 92 | Fixed-capacity LIFO stack, used for *both* the draw and discard piles. |
 | **`GameOptions`** | 87 | Thin adapter over `Prefs` that caches a `GameActivity` reference, so `Game` and `Player` never touch a `Context` directly. Also resolves the two cheat codes. |
-| **`CardImageAdapter`** | 80 | `BaseAdapter` for the card-catalog `GridView`, filtered to the cards actually present in the current deck. |
+| **`CardImageAdapter`** | 91 | `BaseAdapter` for the card-catalog `GridView`, filtered to the cards actually present in the current deck. |
 | **`TapDismissableDialog`** | 39 | Dialog that dismisses on tap, provided the finger moved less than 7 px on both axes. |
 
 ### Threading model
@@ -560,7 +560,7 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.2, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.3, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced

@@ -43,8 +43,7 @@ properties([[$class: 'BuildDiscarderProperty',
                 [$class: 'BooleanParameterDefinition',
                  name: 'RUN_TESTS',
                  defaultValue: true,
-                 description: 'Run unit tests, lint, and the API 34-36 emulator matrix. Off = build and sign only.']
-                ],
+                 description: 'Run unit tests, lint, and the API 34-36 emulator matrix. Off = build and sign only.'],
                 // Screenshots are a documentation asset, not a gate, so they are
                 // off by default: they cost a whole extra emulator boot and
                 // nothing in the build depends on them. Turn it on when the
@@ -55,7 +54,7 @@ properties([[$class: 'BuildDiscarderProperty',
                  name: 'SCREENSHOTS',
                  defaultValue: false,
                  description: 'Boot an emulator, drive the app, and archive the README screenshots. Off = skip entirely.']
-              ]])
+              ]]])
 
 node {
   def moduleDir = 'com.smccloud.hotdeath'

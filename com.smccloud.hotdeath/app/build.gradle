@@ -88,9 +88,15 @@ android {
         //
         // 1.4.4 converts Prefs, the settings screen and the static accessors
         // GameOptions forwards to. One of the two left.
-        versionCode 1004004
+        //
+        // 1.4.5 converts Main, the title screen. That is the last of them: the
+        // Java-to-Kotlin migration is finished and the app is 16 Kotlin files with
+        // no Java source left at all. The patch is still a release counter and not
+        // a test count, so this is a minor that did not move -- 1.4.0 reset the
+        // minor on purpose and nothing since has been worth a new one.
+        versionCode 1004005
 
-        versionName "1.4.4"
+        versionName "1.4.5"
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the

@@ -5,8 +5,11 @@
 # old /jenkins.ps1 did: it is a personal client holding a controller URL, not
 # part of the project's build.
 #
-# The Jenkinsfile declares no parameters, so there is nothing to pass here; this
-# triggers the job and follows it to a result.
+# The job declares one parameter, RUN_TESTS: off means build and sign only, with
+# no unit tests, no lint and no emulator matrix. --tests/--no-tests set it; with
+# neither, the job's own default applies. This posts to buildWithParameters
+# rather than /build, because a parameterized job rejects a bare POST to /build
+# with "HTTP 400 Nothing is submitted".
 #
 # Config, highest precedence first:
 #   1. environment (JENKINS_URL, JENKINS_USER, JENKINS_TOKEN, JENKINS_JOB)
@@ -81,6 +84,9 @@ options:
   -n, --no-watch    queue a build and return its number immediately
       --force       queue even if a build is already running
       --timeout N   seconds to wait for completion (default ${DEFAULT_TIMEOUT})
+      --tests       run unit tests, lint and the API 34-36 emulator matrix
+      --no-tests    build and sign only: skip every test stage
+                    (default: whatever the job is configured to do)
   -h, --help        this text
 EOF
 }
@@ -174,9 +180,20 @@ check_auth() {
 
 # Queue a build and echo its number. Jenkins answers 201 with the queue item,
 # not the build, so this waits out the queue first.
+# queue_build <last-build-number> [name=value ...]
 queue_build() {
   local before=${1-} item build_url exec_obj num waited=0
-  req POST "/job/${JENKINS_JOB}/build"
+  shift || true
+  # buildWithParameters, always. A job that declares a parameter refuses a bare
+  # POST to /build, and one that declares none accepts this just the same, so
+  # there is no need to detect which kind this is. With no arguments the job
+  # applies its own defaults.
+  local data=''
+  local kv
+  for kv in "$@"; do
+    data="${data}${data:+&}${kv}"
+  done
+  req POST "/job/${JENKINS_JOB}/buildWithParameters" "$data"
   case "$http_code" in
     201) ;;
     404) die "job '${JENKINS_JOB}' does not exist on ${JENKINS_URL}" $EX_HTTP ;;
@@ -303,7 +320,9 @@ cmd_log() {
 }
 
 cmd_build() {
-  local force=$1 watch=$2 timeout=$3 before='' state
+  local force=$1 watch=$2 timeout=$3 tests=$4 before='' state
+  shift 4
+  local -a params=("$@")
 
   if [ "$watch" = 1 ]; then
     req GET "/job/${JENKINS_JOB}/lastBuild/api/json"
@@ -317,7 +336,7 @@ cmd_build() {
   fi
 
   local num
-  num=$(queue_build "$before")
+  num=$(queue_build "$before" ${params+"${params[@]}"})
   info "build #${num} queued: ${JENKINS_URL}/job/${JENKINS_JOB}/${num}/"
 
   [ "$watch" = 1 ] || return "$EX_OK"
@@ -346,12 +365,15 @@ cmd_build() {
 }
 
 main() {
-  local force=0 watch=1 timeout=$DEFAULT_TIMEOUT cmd=build
+  local force=0 watch=1 timeout=$DEFAULT_TIMEOUT cmd=build tests=auto
+  local -a params=()
   while [ $# -gt 0 ]; do
     case "$1" in
       build|status|log) cmd=$1; shift ;;
       -n|--no-watch) watch=0; shift ;;
       --force) force=1; shift ;;
+      --tests) tests=yes; shift ;;
+      --no-tests) tests=no; shift ;;
       --timeout) [ $# -ge 2 ] || die "--timeout needs a value" $EX_USAGE
                  timeout=$2; shift 2 ;;
       --timeout=*) timeout=${1#*=}; shift ;;
@@ -361,6 +383,12 @@ main() {
   done
 
   load_creds
+
+  # Only sent when asked for, so the default really is the job's own.
+  case "$tests" in
+    yes) params=("RUN_TESTS=true") ;;
+    no)  params=("RUN_TESTS=false") ;;
+  esac
 
   # Precedence, lowest last: env, then the creds file, then these.
   JENKINS_URL=${JENKINS_URL:-https://jenkins.smccloud.com}
@@ -381,7 +409,8 @@ main() {
   fetch_crumb
 
   case "$cmd" in
-    build) cmd_build "$force" "$watch" "$timeout" ;;
+    build) cmd_build "$force" "$watch" "$timeout" "$tests" \
+             ${params+"${params[@]}"} ;;
     status) cmd_status ;;
     log) cmd_log ;;
   esac

@@ -32,11 +32,21 @@ import android.view.WindowInsets
 // the file consistent with Card.kt, Game.kt and GameTable.kt.
 //
 // getCheatCode is declared String rather than String?, deliberately. It is fed
-// straight into GameOptions, which calls .contains() on the result with no check,
-// and GameOptions is not edited by this commit. The `!!` is inside the getter so
-// the NullPointerException lands where the Java's auto-unboxing would have put
-// it rather than at a call site that has no reason to expect null.
+	// straight into GameOptions, which calls .contains() on the result with no check,
+	// and GameOptions is not edited by this commit. The `!!` is inside the getter so
+	// the NullPointerException lands where the Java's auto-unboxing would have put
+	// it rather than at a call site that has no reason to expect null.
+	//
+	// Every Context below is Context? for the same reason and the same reason it
+	// has to be. GameOptions holds `m_ga: GameActivity?` and shutdown() nulls it,
+	// and it passes that straight in. While these were Java statics, `Context` was a
+	// platform type and silently accepted the null -- build #89 found that out by
+	// rejecting 14 call sites the moment it was written as non-null. Nullable here
+	// restores exactly that: a null still reaches
+	// PreferenceManager.getDefaultSharedPreferences and still throws inside it,
+	// which is where the Java threw.
 class Prefs : PreferenceActivity(), OnSharedPreferenceChangeListener
+
 {
 	// LOTS of code here to show ListPreference and EditTextPreference values
 	// in the summary space
@@ -82,7 +92,11 @@ class Prefs : PreferenceActivity(), OnSharedPreferenceChangeListener
 		getPreferenceScreen().getSharedPreferences().unregisterOnSharedPreferenceChangeListener(this);
 	}
 
-	override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String)
+	// key is String? because that is how the interface declares it -- the SDK
+	// annotates it @Nullable, and Kotlin will not let an override narrow a
+	// platform parameter. The Java had no such problem because there was no
+	// override, just a public method that happened to match.
+	override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?)
 	{
 		updatePrefSummary(findPreference(key));
 	}
@@ -151,74 +165,74 @@ class Prefs : PreferenceActivity(), OnSharedPreferenceChangeListener
 		private const val OPT_P3_AGGRESSION_LEVEL_DEF = "0"
 
 
-		fun getGameSpeed (context: Context): Int
+		fun getGameSpeed (context: Context?): Int
 		{
 			val s = PreferenceManager.getDefaultSharedPreferences(context)
 				.getString (OPT_GAME_SPEED, OPT_GAME_SPEED_DEF)
 			return Integer.parseInt (s!!)
 		}
 
-		fun getTwoDecks (context: Context): Boolean
+		fun getTwoDecks (context: Context?): Boolean
 		{
 			return PreferenceManager.getDefaultSharedPreferences(context)
 						.getBoolean (OPT_TWO_DECKS, OPT_TWO_DECKS_DEF);
 		}
 
-		fun getComputer4th (context: Context): Boolean
+		fun getComputer4th (context: Context?): Boolean
 		{
 			return PreferenceManager.getDefaultSharedPreferences(context)
 						.getBoolean (OPT_COMPUTER_4TH, OPT_COMPUTER_4TH_DEF);
 		}
 
-		fun getFaceUp (context: Context): Boolean
+		fun getFaceUp (context: Context?): Boolean
 		{
 			return PreferenceManager.getDefaultSharedPreferences(context)
 						.getBoolean (OPT_FACE_UP, OPT_FACE_UP_DEF);
 		}
 
-		fun getCheatLevel (context: Context): Int
+		fun getCheatLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_CHEAT_LEVEL, OPT_CHEAT_LEVEL_DEF)!!)
 		}
 
-		fun getCheatCode (context: Context): String
+		fun getCheatCode (context: Context?): String
 		{
 			return PreferenceManager.getDefaultSharedPreferences(context)
 				.getString (OPT_CHEAT_CODE, OPT_CHEAT_CODE_DEF)!!
 		}
 
-		fun getP1SkillLevel (context: Context): Int
+		fun getP1SkillLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_P1_SKILL_LEVEL, OPT_P1_SKILL_LEVEL_DEF)!!)
 		}
 
-		fun getP1AggressionLevel (context: Context): Int
+		fun getP1AggressionLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_P1_AGGRESSION_LEVEL, OPT_P1_AGGRESSION_LEVEL_DEF)!!)
 		}
 
-		fun getP2SkillLevel (context: Context): Int
+		fun getP2SkillLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_P2_SKILL_LEVEL, OPT_P2_SKILL_LEVEL_DEF)!!)
 		}
 
-		fun getP2AggressionLevel (context: Context): Int
+		fun getP2AggressionLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_P2_AGGRESSION_LEVEL, OPT_P2_AGGRESSION_LEVEL_DEF)!!)
 		}
 
-		fun getP3SkillLevel (context: Context): Int
+		fun getP3SkillLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_P3_SKILL_LEVEL, OPT_P3_SKILL_LEVEL_DEF)!!)
 		}
 
-		fun getP3AggressionLevel (context: Context): Int
+		fun getP3AggressionLevel (context: Context?): Int
 		{
 			return Integer.parseInt (PreferenceManager.getDefaultSharedPreferences(context)
 						.getString (OPT_P3_AGGRESSION_LEVEL, OPT_P3_AGGRESSION_LEVEL_DEF)!!)

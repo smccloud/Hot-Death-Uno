@@ -55,6 +55,31 @@ node {
   // green on 9.5.0.
   def gradleVersion = '9.5.0'
   def api = '36'
+
+  // Every Gradle invocation gets these, and they are defined once so they cannot
+  // drift apart -- there are five invocations and a flag added to four of them
+  // is worse than not adding it at all.
+  //
+  // --project-cache-dir moves the whole project-local Gradle cache out of the
+  // workspace and into the toolcache, which is the only thing here that survives
+  // the Workspace cleanup stage. It has to: Gradle keeps the configuration cache
+  // state in <project>/.gradle/configuration-cache, in the project directory and
+  // not in the Gradle user home, so a wiped workspace deletes it before the next
+  // build can read it.
+  //
+  // This is a relocation rather than a copy. An earlier attempt at this preserved
+  // the one directory by stashing it in /tmp and copying it back, and the files
+  // arrived intact -- 20 files, 400K, a complete entry -- while Gradle still
+  // reported "no cached configuration is available" on every run. Copying a cache
+  // in and out is evidently not the same thing to Gradle as never having moved it,
+  // and it is one more thing to go wrong for no gain. Pointing the cache at a
+  // directory that is not deleted achieves the same reuse with nothing to stash,
+  // restore or verify.
+  //
+  // The literal path matches the rest of this file, which already hardcodes
+  // /var/lib/jenkins in the cleanup stage's guard.
+  def gradleArgs = '--no-daemon --stacktrace --project-cache-dir=/var/lib/jenkins/.toolcache/hotdeath/project-cache'
+
   // AGP 8.11's *default* build-tools revision. This project never sets
   // buildToolsVersion, so AGP resolves 35.0.0 no matter how new the installed
   // revision is.
@@ -113,35 +138,38 @@ node {
   // finishes deleting anyway.
   //
   // The expensive things are not in the workspace and are not touched: the
-  // Gradle distribution, the Android SDK, the AVDs and the system images all
-  // live under $JENKINS_HOME/.toolcache/hotdeath, and the dependency cache is
-  // in the Gradle user home outside the tree. So this costs a full recompile and
-  // a full R8 pass -- tens of seconds -- and keeps the downloads.
+  // Gradle distribution, the Android SDK, the AVDs, the system images and the
+  // Gradle project cache all live under $JENKINS_HOME/.toolcache/hotdeath, and
+  // the dependency cache is in the Gradle user home outside the tree. So this
+  // costs a full recompile and a full R8 pass -- tens of seconds -- and keeps
+  // the downloads.
   //
-  // ONE THING IS NOW PRESERVED: the Gradle configuration cache, at
-  // $moduleDir/.gradle/configuration-cache.
+  // This stage still deletes everything, and that is deliberate even now that
+  // the configuration cache is enabled. Two things were tried, and the order
+  // matters:
   //
-  // That location is the whole reason this stage needed changing.
-  // org.gradle.configuration-cache is set in app's gradle.properties, and
-  // Gradle documents the state as living under <project>/.gradle/configuration-
-  // cache -- in the project directory, NOT in the Gradle user home where
-  // everything else cached lives. So a wipe that leaves no exception deletes the
-  // cache before the build can read it: every run would store an entry and never
-  // hit one, paying the write cost for nothing. Enabling the flag without this
-  // carve-out would have made CI strictly slower.
+  // 1. Enabling org.gradle.configuration-cache alone. Its state lives at
+  //    <project>/.gradle/configuration-cache -- in the project directory, not in
+  //    the Gradle user home -- so this stage deleted it before every build.
+  //    Every run stored an entry and never hit one: the write cost with none of
+  //    the benefit, which is slower than not enabling it at all.
   //
-  // Only configuration-cache is kept, and not the rest of .gradle, so that what
-  // survives is exactly the one thing whose benefit is being measured. The
-  // project-local execution history in .gradle is still deleted, which is
-  // deliberate: build #67 above was about Gradle skipping work and reporting
-  // SUCCESS anyway, and up-to-date state is the thing to keep out of this
-  // workspace. Note that the configuration cache cannot reintroduce that class
-  // of problem -- it skips the configuration phase, not task execution, so it
-  // has no bearing on whether a task runs or reports up-to-date.
+  // 2. Preserving that one directory by stashing it in /tmp and copying it back.
+  //    The files arrived intact -- 20 of them, 400K, a complete entry with
+  //    entry.bin and buildfingerprint.bin -- and Gradle still reported "no
+  //    cached configuration is available" on every single run. Copying a cache
+  //    in and out is evidently not the same thing to Gradle as never having
+  //    moved it. Builds #75 and #76 measured 1m05s and 1m02s against #73's
+  //    1m04s: no change, because there were no hits to save anything on.
   //
-  // The stash is outside $WORKSPACE, so the wipe cannot eat the copy of the copy.
+  // So the cache is moved out of the workspace altogether with
+  // --project-cache-dir, see gradleArgs above, and this stage goes back to
+  // deleting everything with nothing preserved. The check below is therefore
+  // the original one and unchanged in behaviour: it exists to catch a wipe that
+  // did not finish -- an undeletable file, a mount point, a permission problem
+  // -- which is the only kind of leftover it can now see, since everything in
+  // the workspace is removed before it runs.
   stage('Workspace cleanup') {
-    withEnv(["MODULE_DIR=${moduleDir}"]) {
     sh '''
       set -eu
       # Refuse to delete anything unless we really are in a workspace. A stage
@@ -163,85 +191,16 @@ node {
       BEFORE=$(du -sh . 2>/dev/null | awk '{print $1}' || echo '?')
       echo "before cleanup: $BEFORE"
       find . -mindepth 1 -maxdepth 1 -print | cut -c3- | sort >&2 || true
-
-      # Stash the configuration cache, in /tmp, before the wipe. Nothing is
-      # created under $WORKSPACE for this: the wipe would take it with
-      # everything else, which is the bug this stage originally had.
-      CC_REL="$MODULE_DIR/.gradle/configuration-cache"
-      STASH=$(mktemp -d)
-      HAD_CC=no
-      if [ -d "$CC_REL" ]; then
-        if cp -a "$CC_REL" "$STASH/cc" 2>/dev/null; then
-          HAD_CC=yes
-          echo "stashed configuration cache: $CC_REL"
-          # What is actually in it, because "the directory survived" and "the
-          # entry survived" are different claims and only one of them was true
-          # for the first few runs. Size plus the entry files, so a miss is
-          # diagnosable from the log instead of needing a workspace that the next
-          # build is about to wipe.
-          echo "  contents: $(find "$STASH/cc" -type f | wc -l) file(s), $(du -sh "$STASH/cc" | awk '{print $1}')"
-          find "$STASH/cc" -type f -name '*.bin' -printf '  entry: %f %s bytes\n' 2>/dev/null || true
-        else
-          echo "WARNING: could not read $CC_REL to preserve it; carrying on without" >&2
-        fi
-      else
-        echo "no configuration cache to preserve yet"
-      fi
-
       # -exec rm -rf rather than rm -rf ./* : the glob does not match dotfiles
       # and fails outright on an empty directory.
       find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-
-      if [ "$HAD_CC" = yes ]; then
-        mkdir -p "$(dirname "$CC_REL")"
-        cp -a "$STASH/cc" "$CC_REL"
-        echo "restored configuration cache: $CC_REL"
-      fi
-      rm -rf "$STASH"
-
-      # What is left is asserted by name rather than by count. Two different
-      # failures are being caught, and it is worth being precise about which is
-      # which:
-      #
-      #   - With no cache to restore, this is the original check and it catches a
-      #     wipe that did not finish -- an undeletable file, a mount point, a
-      #     permission problem. Those would be deleted *before* this point, so
-      #     they are the only kind of leftover it can see.
-      #   - With a cache restored, the leftovers it can see are the ones the
-      #     restore just put back. It is checking that the restore was surgical:
-      #     wrong path, or cp -a bringing more than it should. It cannot detect a
-      #     half-finished wipe, because the wipe happens first.
-      #
-      # So a bare count would not do: "1 entry remains" is satisfied by one
-      # stranger just as happily as by the cache.
-      LEFT=$(find . -mindepth 1 -maxdepth 1 | cut -c3- | sort)
-      if [ "$HAD_CC" = yes ]; then
-        if [ "$LEFT" != "$MODULE_DIR" ]; then
-          echo "ERROR: workspace holds more than the preserved cache:" >&2
-          printf '%s\n' "$LEFT" >&2
-          exit 1
-        fi
-        UNDER=$(cd "$MODULE_DIR" && find . -mindepth 1 -maxdepth 1 | cut -c3- | sort | tr '\n' ' ')
-        if [ "$UNDER" != ".gradle " ]; then
-          echo "ERROR: $MODULE_DIR should hold only .gradle, but holds: $UNDER" >&2
-          exit 1
-        fi
-        UNDER2=$(cd "$MODULE_DIR/.gradle" && find . -mindepth 1 -maxdepth 1 | cut -c3- | sort | tr '\n' ' ')
-        if [ "$UNDER2" != "configuration-cache " ]; then
-          echo "ERROR: .gradle should hold only configuration-cache, but holds: $UNDER2" >&2
-          exit 1
-        fi
-        echo "after cleanup: only the preserved configuration cache remains"
-      else
-        if [ -n "$LEFT" ]; then
-          echo "ERROR: workspace is not empty after cleanup" >&2
-          printf '%s\n' "$LEFT" >&2
-          exit 1
-        fi
-        echo "after cleanup: 0 entries remain"
+      LEFT=$(find . -mindepth 1 -maxdepth 1 | wc -l)
+      echo "after cleanup: $LEFT entries remain"
+      if [ "$LEFT" != '0' ]; then
+        echo "ERROR: workspace is not empty after cleanup" >&2
+        exit 1
       fi
     '''
-    }
   }
 
   stage('Checkout') {
@@ -356,7 +315,7 @@ node {
   stage('Assemble') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
-        sh "${gradleHome} --no-daemon --stacktrace assembleDebug"
+        sh "${gradleHome} ${gradleArgs} assembleDebug"
       }
     }
   }
@@ -519,7 +478,7 @@ node {
   stage('Assemble release') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
-        sh "${gradleHome} --no-daemon --stacktrace assembleRelease"
+        sh "${gradleHome} ${gradleArgs} assembleRelease"
       }
     }
   }
@@ -561,14 +520,14 @@ node {
   stage('Unit tests') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
-        sh "${gradleHome} --no-daemon --stacktrace testDebugUnitTest"
+        sh "${gradleHome} ${gradleArgs} testDebugUnitTest"
       }
     }
   }
   stage('Lint') {
     withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
       dir(moduleDir) {
-        sh "${gradleHome} --no-daemon --stacktrace lintDebug"
+        sh "${gradleHome} ${gradleArgs} lintDebug"
       }
     }
   }
@@ -862,7 +821,7 @@ node {
             # Run every API even if one fails, so a single build reports the
             # whole matrix instead of stopping at the first bad device. The
             # exit code is re-raised at the end.
-            if "${gradleHome}" --no-daemon --stacktrace connectedDebugAndroidTest; then
+            if "${gradleHome}" ${gradleArgs} connectedDebugAndroidTest; then
               ran="\$ran \$AVD"
             else
               ran="\$ran \$AVD"

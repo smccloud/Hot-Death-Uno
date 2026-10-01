@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.5 (`versionCode` 1004005) |
+| Current version | 1.4.6 (`versionCode` 1004006) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app is fully Kotlin as of 1.4.5; the test suite is Java; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -298,8 +298,16 @@ rely on `ANDROID_HOME`.
 `app/src/test` holds the JVM and Robolectric suite (`gradle testDebugUnitTest`) and
 `app/src/androidTest` the instrumented one (`gradle connectedAndroidTest`, which
 needs a device or emulator). A tracked `Jenkinsfile` runs both: unit tests, lint,
-`assembleDebug`, `assembleRelease`, then `connectedAndroidTest` on a headless
-emulator at API 34, 35 and 36.
+`assembleDebug`, `verifyVersionCode`, `assembleRelease`, then
+`connectedAndroidTest` on a headless emulator at API 34, 35 and 36.
+
+`verifyVersionCode` is the versioning gate described under
+[Credits and history](#credits-and-history): it fails the build when
+`app/build.gradle`'s `versionCode` is not strictly greater than the highest
+published `v*` tag. It needs the tags present, so it is not wired into `check` —
+a clone or a source-archive export has none, and failing `check` for that would be
+worse than not checking. The Jenkinsfile's Checkout stage fails if the tags were
+not fetched, because otherwise the task would pass silently.
 
 The release APK is the published artifact, and since 1.2.0 it is **signed with the
 project's release certificate** rather than the debug key. The key itself is not in
@@ -341,7 +349,7 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004005
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004006
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
@@ -602,30 +610,34 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.5, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.6, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
-From 1.1.0 the patch number is the count of passing tests in the build that produced
-the artifact — it moves by 0.0.1 per test rather than being maintained by hand — so
-`versionName` 1.3.167 means 140 unit tests plus 27 instrumented all went green.
-`versionCode` encodes the same three numbers as `major * 1000000 + minor * 1000 +
-patch`, which leaves three digits each for the minor and the patch.
+Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
+minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
+than typed next to it, so the two cannot drift apart: the encoding is
+`major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
+no `versionCode` has ever had to change retroactively. 1.4.6 is 1004006.
 
-1.2.0 reset the patch to 0 and moved the minor instead, and 1.3.0 did the same. A
-release that adds no tests has no new patch number to move to, and 1.1.143 had gone
-out signed with the debug key, which Android refuses to replace with a differently
-signed build at the same `versionCode` — so the minor carries releases until the test
-count moves again. 1.4.0 is the same case: it converts `GameTable` to Kotlin and adds
-no tests, so the count is still 140 + 27 and the minor is what moved.
+The one hard constraint is that `versionCode` must strictly increase on every release.
+Android refuses to install a build whose code is not greater than the installed one,
+and refuses to replace a differently signed build at the same code — and neither
+failure is visible until someone tries the install. `gradle verifyVersionCode` checks
+it against the highest published `v*` tag, and the Jenkinsfile runs it before the
+release build. Before 1.4.6 that rule was stated in a comment in `build.gradle` and
+enforced by hand, with nothing in CI reading the version at all.
 
-From 1.4.0 the patch stops tracking the test count and becomes a plain release
-counter within the 1.4 line — so 1.4.1 does **not** mean "one more passing test
-than 1.4.0". It is the second Kotlin conversion of stage 5 (`GameActivity`), and
-like 1.4.0 it adds no tests. The test count itself is unchanged at 140 unit plus
-27 instrumented since 1.3.167; the minor is what records a real change, and the
-patch only has to increase so Android will accept the install.
+The patch has three digits, so it runs out at 999; bump the minor and reset the patch
+to 0 before it gets there.
 
-See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history.
+Earlier versions carried a patch number documented as "the count of passing tests" —
+1.3.167 reading as 140 unit plus 27 instrumented. That was inaccurate from the start:
+`src/androidTest` has only ever held 9 tests, so the real total was 149, and the scheme
+had in any case been abandoned at 1.4.0. The miscount is recorded at 1.1.143 in the
+changelog. 1.4.6 is the first release under the plain scheme.
+
+See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history —
+1.0.5 and everything before it is the original author's, and 1.1.0 onward is 2026.
 Outstanding work is tracked as GitHub issues, listed under
 [Open items](#open-items-from-the-original-authors-roadmap).
 

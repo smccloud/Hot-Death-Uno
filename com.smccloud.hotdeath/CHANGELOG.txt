@@ -91,5 +91,123 @@ Version 1.0.4                2012-01-24
 Version 1.0.5                2012-01-24
 
  - fixed version string in strings.xml - could this have been a more 
-   sloppy release???
+    sloppy release???
+     
+
+================================================================================
+Everything below this line was released in 2026. The gap is fourteen years:
+nothing was published between 1.0.5 in December 2012 and 1.1.0 in September
+2026, during which the toolchain moved from Ant to a modern Gradle and the app
+from Java to Kotlin.
+
+Note that 1.0.6 through 1.0.12 were never published here either. They exist only
+in the upstream project's own history.
+================================================================================
+
+Version 1.1.0                2026-09-30
+
+ - first release from the modernized toolchain: AGP 8.11.1, Gradle 9.5.0, JDK 17,
+   compileSdk 36, minSdk 34, targetSdk 36
+
+ - retargeted to Android 16. Edge-to-edge is now mandatory at targetSdk 35+, so
+   each activity installs a WindowInsets listener and pads itself by the
+   system-bar and display-cutout insets. Uses the platform WindowInsets API
+   rather than androidx.core, which keeps the app at zero third-party runtime
+   dependencies
+
+ - rotation no longer recreates the activity: configChanges is declared on all
+   three activities, which also stops an in-progress game being lost on rotate
+
+ - 114 JVM and Robolectric unit tests added across the pure-logic classes
+
+Version 1.1.143              2026-09-30
+
+ - 140 unit tests now, from 114
+
+ - NOTE: this version's patch number was documented as "the count of passing
+   tests, 116 unit plus 27 instrumented". That was never accurate. The
+   instrumented suite has only ever held 9 tests (PenaltyStackTest's 6 plus
+   MainLaunchTest's 3), so the real total was 125, not 143. The number was
+   carried forward by adding rather than recomputing. See version 1.4.6.
+
+Version 1.2.0                2026-09-30
+
+ - first release signed with a real release certificate rather than the debug
+   key. Installs over a debug-signed build only after uninstalling it, since
+   Android rejects a differently signed build at the same versionCode
+
+ - CI verifies the release APK's signature on every run and prints the
+   certificate fingerprint. That check exists because three separate builds were
+   green while producing a debug-signed artifact
+
+Version 1.2.164              2026-09-30
+
+ - adds HandPlayabilityTest (19 tests): hasValidCards and Game.checkCard, which
+   need a real Game, plus the isfinal branch that charges the green 3 to its
+   owner's virus penalty
+
+Version 1.3.0                2026-09-30
+
+ - stage 4 of the Java-to-Kotlin migration: Player, HumanPlayer, ComputerPlayer,
+   Hand and Game. No behaviour change
+
+Version 1.3.167              2026-09-30
+
+ - adds GameRoundLoopTest, the first tests to reach the round loop: two whole
+   rounds per ruleset plus a standard-rules deal check. Covers dealHands,
+   advanceRound, handleSpecialCards, assessPenalty, calculateScore, sortHand and
+   finishRound -- most of Game
+
+ - 140 unit tests plus 9 instrumented
+
+Version 1.4.0                2026-09-30
+
+ - stage 5 begins: GameTable to Kotlin (1,935 lines, the largest of the six).
+   No behaviour change
+
+Version 1.4.1                2026-10-01
+
+ - GameActivity to Kotlin
+
+Version 1.4.2                2026-10-01
+
+ - TapDismissableDialog to Kotlin
+
+Version 1.4.3                2026-10-01
+
+ - CardImageAdapter to Kotlin
+
+Version 1.4.4                2026-10-01
+
+ - Prefs to Kotlin. The twelve static accessors move into a companion object, so
+   a future Java caller would need @JvmStatic
+
+Version 1.4.5                2026-10-01
+
+ - Main to Kotlin. The Java-to-Kotlin migration is complete: 16 Kotlin files, no
+   Java source left in the app. The test suite is still Java, deliberately -- a
+   conversion that also rewrites its own tests cannot tell a migration regression
+   from a test that changed its mind
+
+Version 1.4.6                2026-10-01
+
+ - VERSIONING FIXED. The scheme documented in build.gradle claimed the patch
+   number was the count of passing tests. It had not been since 1.4.0, and it
+   had never matched the real counts either (see the 1.1.143 note above). Now:
+   plain MAJOR.MINOR.PATCH, with the patch a release counter within the minor
+   line
+
+ - versionCode is derived from versionName in the build script rather than typed
+   alongside it, so the two cannot disagree. The encoding is unchanged --
+   major*1000000 + minor*1000 + patch -- so no published versionCode moves
+
+ - added a verifyVersionCode task that fails unless the declared versionCode is
+   strictly greater than the highest published v* tag. Until now nothing checked
+   this at all: the rule was stated in a comment and enforced by hand. The
+   Jenkinsfile runs it before the release build, and its Checkout stage now
+   fails if the tags were not fetched, since the task cannot compare anything
+   without them
+
+ - no application code changed. The test count is unchanged at 140 unit plus 9
+   instrumented
     

@@ -1,4 +1,191 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import javax.inject.Inject
+
+// Declared before the `tasks.register` that uses it: Groovy resolves a class
+// defined in a build script at the point it is referenced, so it cannot be
+// hoisted out of this order.
+abstract class VerifyVersionCode extends DefaultTask {
+
+    @Inject
+    abstract ExecOperations getExecOperations()
+
+    // @Internal, not @Input: these are constants of the build script, not
+    // something a caller varies per invocation. Declaring them as inputs would
+    // let the configuration cache key on them, which is harmless but would
+    // imply they are meant to be overridden.
+    @Internal
+    abstract Property<Integer> getDeclaredVersionCode()
+
+    @Internal
+    abstract Property<String> getDeclaredVersionName()
+
+    // Where git runs. Set to the Gradle root rather than the repository root,
+    // because the two are not the same directory: the Gradle root is
+    // com.smccloud.hotdeath/ and the repository root is its parent.
+    @Internal
+    abstract DirectoryProperty getGitWorkingDir()
+
+    @TaskAction
+    void verify() {
+        def declaredCode = declaredVersionCode.get()
+        def declaredName = declaredVersionName.get()
+        def workingDir = gitWorkingDir.get().asFile
+
+        def published = [:]
+        def tagList = gitOutput(['tag', '--list', 'v*'], workingDir)
+        if (tagList == null) {
+            logger.lifecycle('verifyVersionCode: not a git checkout with tags; nothing to ' +
+                'compare against. Not an error.')
+            return
+        }
+
+        // `git show <tag>:<path>` resolves the path against the repository root,
+        // not against the Gradle root, so ask git where it thinks we are rather
+        // than hardcoding a directory name.
+        def prefix = gitOutput(['rev-parse', '--show-prefix'], workingDir)
+        if (prefix == null) {
+            logger.lifecycle('verifyVersionCode: cannot locate the repository root; ' +
+                'nothing to compare against. Not an error.')
+            return
+        }
+        def buildGradleInRepo = prefix + 'app/build.gradle'
+
+        // One tag per line, blanks dropped. `git tag --list` newline-separates,
+        // and iterating the raw string instead of a list of lines walks it
+        // character by character -- which is a silent way to run `git show v:...`
+        // once per letter of "v1.4.5".
+        def tagNames = tagList.readLines().findAll { it.trim() }
+
+        // A plain for loop rather than tagNames.each {}. Inside a closure the
+        // method lookup for a private method on a Gradle-decorated task class
+        // does not resolve, and `return` inside a closure returns from the
+        // closure anyway, which is a different thing from what `continue` means
+        // here. The loop says both of those things plainly.
+        for (String tagName : tagNames) {
+            def text = gitOutput(['show', "${tagName}:${buildGradleInRepo}"], workingDir)
+            if (text == null) {
+                logger.info("verifyVersionCode: no ${buildGradleInRepo} at ${tagName}, skipping")
+                continue
+            }
+            // Find the version a tag declares, which is one of two shapes. Tags up to
+            // v1.4.5 wrote `versionName "1.4.5"` directly; from v1.4.6 the
+            // literal moved up to `def appVersion = '1.4.6'` and the line inside
+            // defaultConfig reads `versionName appVersion`. Matching only the
+            // first shape would make this task skip v1.4.6 and every tag after
+            // it -- so it would compare against v1.4.5 forever and never notice
+            // a release that reused a versionCode. Both are anchored on the whole
+            // trimmed line, so a version quoted inside a comment does not match.
+            def found = null
+            for (String line : text.readLines()) {
+                def matcher = line.trim() =~
+                    /^(?:versionName\s+"|def\s+appVersion\s*=\s*['"])(\d+)\.(\d+)\.(\d+)['"]?$/
+                if (matcher.matches()) {
+                    found = matcher
+                    break
+                }
+            }
+            if (found == null) {
+                logger.info("verifyVersionCode: no declared version at ${tagName}, skipping")
+                continue
+            }
+            def name = "${found.group(1)}.${found.group(2)}.${found.group(3)}"
+            def code = (found.group(1) as int) * 1000000 +
+                (found.group(2) as int) * 1000 + (found.group(3) as int)
+            published[tagName] = [name: name, code: code]
+        }
+
+        if (published.isEmpty()) {
+            logger.lifecycle('verifyVersionCode: no published v* tags found; nothing to ' +
+                'compare against. Expected in a clone without tags. Not an error.')
+            return
+        }
+
+        // A tag pointing at the commit being built is this release being tagged
+        // now, not a published version it has to beat. Comparing against it would
+        // make the release commit fail its own gate: v1.4.6 tagged on the commit
+        // that declares 1.4.6 is 1004006 against 1004006, and every tag after
+        // this would go red the moment it was cut. So a tag on HEAD is the
+        // release in progress and is excluded from the baseline. What remains is
+        // everything actually published before it, which is what the check is for.
+        String head = gitOutput(['rev-parse', 'HEAD'], workingDir)
+        def baseline = [:]
+        for (def entry : published.entrySet()) {
+            def tagCommit = gitOutput(['rev-list', '-n', '1', entry.key], workingDir)
+            if (head != null && tagCommit != null && tagCommit == head) {
+                logger.lifecycle("verifyVersionCode: ${entry.key} points at HEAD " +
+                    "(${entry.value.name}), treating it as this release being tagged.")
+                continue
+            }
+            baseline[entry.key] = entry.value
+        }
+
+        if (baseline.isEmpty()) {
+            logger.lifecycle('verifyVersionCode: every v* tag points at HEAD, so nothing ' +
+                'has been published yet. Nothing to compare against. Not an error.')
+            return
+        }
+
+        // Highest by the same encoding versionCode uses, so this is the ordering
+        // Android sees. Comparing the tag names instead would put v1.3.167 after
+        // v1.4.0, which is not what any version of the app believes.
+        String highestTag = null
+        def highest = null
+        for (def entry : baseline.entrySet()) {
+            if (highest == null || entry.value.code > highest.code) {
+                highestTag = entry.key
+                highest = entry.value
+            }
+        }
+
+        if (declaredCode <= highest.code) {
+            throw new GradleException(
+                "versionCode ${declaredCode} (${declaredName}) must be strictly greater " +
+                "than ${highest.code} (${highestTag}, ${highest.name}).\n" +
+                "Android refuses to install this over the published build, and refuses " +
+                'to replace one signed with a different key at the same versionCode.\n' +
+                'Bump the minor or the patch in appVersion near the top of this file.')
+        }
+
+        logger.lifecycle("verifyVersionCode: ${declaredCode} (${declaredName}) > " +
+            "${highest.code} (${highestTag}, ${highest.name}). OK.")
+    }
+
+    // Returns stdout, or null when the command fails. Callers treat null as
+    // "not available here", which is the right reading for every command here.
+    // ExecOperations rather than `['git', ...].execute()`. The configuration
+    // cache is on, and it treats a bare external process as an undeclared
+    // input: the build fails with "external process started 'git ...'" even
+    // though the command is constant. The injected service is what makes this
+    // task configuration-cache clean.
+    //
+    // Not named `git`: this project has a task called git, and a method of the
+    // same name on a task is shadowed by the task rather than winning.
+    private String gitOutput(List<String> args, File workingDir) {
+        // Both streams are captured rather than left inheriting the console.
+        // stderr in particular is noise on failure -- `git show` on a tag that
+        // predates app/build.gradle writes "path does not exist" -- and letting
+        // it through would print that for every skipped tag.
+        def stdout = new ByteArrayOutputStream()
+        def stderr = new ByteArrayOutputStream()
+        def result = execOperations.exec { spec ->
+            spec.commandLine(['git'] + args)
+            spec.workingDir(workingDir)
+            spec.standardOutput = stdout
+            spec.errorOutput = stderr
+            // Required, not optional. exec() throws on a non-zero exit by
+            // default, and a non-zero exit is the normal answer here: `git show`
+            // against a tag that predates app/build.gradle, or any command in a
+            // directory that is not a checkout at all. Treat those as "nothing
+            // to read" rather than as build failures.
+            spec.ignoreExitValue = true
+        }
+        if (result.exitValue != 0) {
+            logger.info("verifyVersionCode: git ${args.join(' ')} exited ${result.exitValue}")
+            return null
+        }
+        return stdout.toString('UTF-8').trim()
+    }
+}
 
 // Release signing material, read from keystore.properties beside this file when
 // it exists. That file is gitignored and holds the four secrets, so nothing
@@ -11,6 +198,56 @@ def hasReleaseKeystore = keystorePropertiesFile.exists()
 if (hasReleaseKeystore) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
+
+// Versioning: MAJOR.MINOR.PATCH, and the patch is a plain release counter
+// within the minor line. Nothing derives it from anything else -- 1.4.6 is the
+// seventh release of the 1.4 line, and 1.5.0 is the next line rather than the
+// seven hundredth patch of this one.
+//
+// versionCode is computed from versionName below so the two cannot disagree:
+// major*1000000 + minor*1000 + patch. That is the encoding every published
+// version already uses, so no versionCode ever has to change retroactively --
+// 1.4.5 is still 1004005 and this release is 1.4.6 / 1004006.
+//
+// The one hard constraint: Android refuses to install a build whose versionCode
+// is not strictly greater than the one already installed, and refuses to
+// replace a build signed with a different key at the same versionCode. So
+// versionCode must increase on every release even when nothing else did.
+// `gradle verifyVersionCode` checks that against the highest existing tag, and
+// the Jenkinsfile runs it before the release build; the check used to be
+// documentation and is now a gate.
+//
+// The patch has three digits, so it runs out at 999. Bump the minor and reset
+// the patch to 0 when it gets close. The minor has three digits too, for the
+// same reason.
+//
+// Release history is in CHANGELOG.txt, not here. It used to be a 70-line
+// comment in this file, which is the wrong place for it: it could only ever be
+// as current as the last person to remember to update it, and by 1.4.5 it was
+// describing a test-count scheme that had been abandoned at 1.4.0 and had never
+// matched the real counts anyway. See #12.
+def appVersion = '1.4.6'
+
+def appVersionParts = appVersion.tokenize('.')
+if (appVersionParts.size() != 3 || !appVersionParts.every { it ==~ /\d+/ }) {
+    throw new GradleException(
+        "versionName must be MAJOR.MINOR.PATCH with three numeric parts, got '${appVersion}'")
+}
+def major = appVersionParts[0] as int
+def minor = appVersionParts[1] as int
+def patch = appVersionParts[2] as int
+if (minor > 999) {
+    throw new GradleException(
+        "Minor ${minor} needs four digits but versionCode encodes it in three. " +
+        "There is no encoding left for that line; pick a different scheme.")
+}
+if (patch > 999) {
+    throw new GradleException(
+        "Patch ${patch} does not fit in the three digits versionCode gives it, and " +
+        "patch ${patch + 1} would collide with the next minor. Bump the minor and " +
+        "reset the patch to 0 -- 1.${minor + 1}.0.")
+}
+def computedVersionCode = major * 1000000 + minor * 1000 + patch
 
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
@@ -29,74 +266,12 @@ android {
 
         targetSdk 36
 
-        // Versioning: MAJOR.MINOR.PATCH, where PATCH is the number of passing
-        // tests in the build that produced the artifact. It starts at 1.1.0 and
-        // moves by 0.0.1 per passing test, so the patch number is a running count
-        // of green tests rather than a hand-maintained sequence -- bumping it is
-        // a matter of reading the pass count off the build that just ran.
-        //
-        // versionCode only ever has to increase, and Android compares nothing
-        // else, so it encodes the same three numbers: major*1000000 +
-        // minor*1000 + patch. That gives three digits for the minor and three for
-        // the patch; when the patch count reaches 1000, bump the minor and start
-        // the patch over at 0.
-        //
-        // 1.1.143 = 116 unit tests plus 27 instrumented, as build #45 ran them,
-        // and is the last purely test-derived version.
-        //
-        // 1.2.0 resets the patch and is the first build carrying the release
-        // signing key. The patch counts tests, not releases, so a release that
-        // adds no tests -- re-signing a rebuilt artifact, say -- moves the minor
-        // instead. Read the patch off the build when it advances; move the minor
-        // when it does not. It has to move at all: 1.1.143 was published signed
-        // with the debug key, and Android refuses to install a differently
-        // signed build over the same versionCode.
-        //
-        // 1.2.164 = 137 unit tests plus 27 instrumented, as build #59 runs them.
-        // Adds HandPlayabilityTest: hasValidCards and Game.checkCard, which
-        // needed a real Game, and the isfinal branch that charges the green 3
-        // to its owner's virus penalty.
-        //
-        // 1.3.167 adds GameRoundLoopTest, the three tests that drive startRound and
-        // advanceRound to a finish. That is the code the rest of the suite could
-        // only reach by poking private fields in: everything from dealHands through
-        // finishRound. 140 unit tests plus 27 instrumented, so the patch moves
-        // from 164 and the minor stays where stage 4 put it.
-        //
-        // 1.4.0 converts GameTable to Kotlin. The minor moves rather than the patch
-        // because the conversion adds no tests: GameTable is an Android View, and
-        // GameRoundLoopTest already constructs one, so there is nothing new for the
-        // suite to cover. It is the first of stage 5's six remaining Java files.
-        // The count is still 140 unit plus 27 instrumented, which is what 1.3.167
-        // already meant -- so this release exists to carry the converted table, not
-        // to announce anything the last one did not.
-        //
-        // 1.4.1 converts GameActivity, the second of stage 5's six. Still 140 plus
-        // 27, so the count has not moved and the patch is no longer tracking it:
-        // from 1.4.0 the patch is just a release counter within the 1.4 line, and the
-        // minor is what records a real change. Saying so here rather than letting
-        // the next reader assume 1.4.1 means "one more test than 1.4.0", which it
-        // does not. versionCode still has to increase -- Android refuses to install
-        // a build over the same one, signed or not.
-        //
-        // 1.4.2 converts TapDismissableDialog, the smallest of the remaining four.
-        // Same deal on tests: it is a Dialog with one override, and nothing in the
-        // suite constructs one.
-        //
-        // 1.4.3 converts CardImageAdapter, the card-catalog GridView adapter. The
-        // fourth of stage 5's six; Prefs and Main are left.
-        //
-        // 1.4.4 converts Prefs, the settings screen and the static accessors
-        // GameOptions forwards to. One of the two left.
-        //
-        // 1.4.5 converts Main, the title screen. That is the last of them: the
-        // Java-to-Kotlin migration is finished and the app is 16 Kotlin files with
-        // no Java source left at all. The patch is still a release counter and not
-        // a test count, so this is a minor that did not move -- 1.4.0 reset the
-        // minor on purpose and nothing since has been worth a new one.
-        versionCode 1004005
+        // versionCode is the only field Android compares, and it is derived from
+        // appVersion at the top of this file rather than typed here. See the
+        // note there for the encoding and for why it has to increase.
+        versionCode computedVersionCode
 
-        versionName "1.4.5"
+        versionName appVersion
 
         // The instrumented suite still needs a real runtime: MainLaunchTest
         // launches an Activity and inspects live widgets. src/test covers the
@@ -190,3 +365,34 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.15.1'
     testImplementation 'androidx.test:core:1.6.1'
 }
+
+// Android refuses to install a build whose versionCode is not strictly greater
+// than the installed one, and refuses to replace a build signed with a different
+// key at the same versionCode. Both failures are invisible until someone tries
+// the install, so this checks it before the release APK is built rather than
+// after.
+//
+// The baseline is the highest existing v* tag, not the previous version in the
+// git history: a tag is what was actually published. 1.2.145 and 1.2.164 were
+// both in the history and neither was ever published, so "the version before
+// this one" is not a reliable thing to compare against.
+//
+// A tag on HEAD is excluded, because that is the release being cut rather than a
+// version already published. Without that, tagging v1.4.6 on the commit that
+// declares 1.4.6 would make the release commit fail its own check -- 1004006
+// against 1004006 -- and the pipeline would go red on the tagged build that is
+// supposed to be the good one.
+//
+// Deliberately not wired into `check`. It reads git, so it needs a checkout that
+// has the tags -- a source-archive export and a shallow clone have neither, and
+// failing `check` for that would be worse than not checking at all. The
+// Jenkinsfile calls it explicitly on the release path, which is the only place
+// an out-of-date versionCode can ship.
+tasks.register('verifyVersionCode', VerifyVersionCode) {
+    group = 'verification'
+    description = 'Fails unless versionCode is greater than the highest published v* tag.'
+    declaredVersionCode.set(computedVersionCode)
+    declaredVersionName.set(appVersion)
+    gitWorkingDir.set(rootDir)
+}
+

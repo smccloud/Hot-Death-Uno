@@ -217,8 +217,26 @@ node {
     '''
   }
 
+  // Tags are fetched explicitly rather than left to whatever the plugin's
+  // default happens to be. The Version check stage below compares the declared
+  // versionCode against the highest published v* tag, and it deliberately does
+  // NOT fail when there are no tags -- that is the right behaviour for a local
+  // clone or a source-archive export, and the wrong one here. So the guarantee
+  // that the tags are present has to come from this side. `checkout scm` on its
+  // own fetches tags only when the refspec happens to include them.
   stage('Checkout') {
     checkout scm
+    sh '''
+      set -eu
+      git fetch --tags --force --quiet origin || true
+      count=$(git tag --list 'v*' | wc -l)
+      echo "v* tags available: $count"
+      if [ "$count" -eq 0 ]; then
+        echo 'ERROR: no v* tags after fetching, so the Version check stage cannot' >&2
+        echo 'compare anything and would pass silently' >&2
+        exit 1
+      fi
+    '''
   }
 
   stage('Toolchain') {
@@ -482,6 +500,24 @@ node {
         throw err
       }
       echo 'WARNING: no signing credentials on this controller -- the release APK will be debug-signed'
+    }
+  }
+
+  // Before Assemble release, and for the same reason: it costs a second, and it
+  // is the last point at which a wrong versionCode is cheap. Android refuses to
+  // install a build whose versionCode is not strictly greater than the one
+  // already installed, and refuses to replace one signed with a different key
+  // at the same versionCode -- neither of which is visible until someone tries
+  // the install on a device. The task compares app/build.gradle's declared
+  // version against the highest published v* tag and fails if it has not moved
+  // past it. Its own build.gradle comment says why it is not wired into
+  // `check`: it needs the tags, and the only builds here that matter are the
+  // release ones.
+  stage('Version check') {
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh "${gradleHome} ${gradleArgs} verifyVersionCode"
+      }
     }
   }
 

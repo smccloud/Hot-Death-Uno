@@ -2,7 +2,7 @@
 
 Java-to-Kotlin migration.
 
-**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. Seven of the eight app classes referenced here — `Card`, `CardDeck`, `ComputerPlayer`, `Game`, `GameTable`, `Hand`, `Player` — are now `.kt`, and every line number in them has moved, so grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical. `CardImageAdapter` is still Java, so its references are still live.
+**A note on the line references below.** They are written as `Foo.java:123` and are line numbers in the **pre-migration Java**, which is what the surrounding text is describing. Eight of the ten app classes referenced here — `Card`, `CardDeck`, `ComputerPlayer`, `Game`, `GameActivity`, `GameTable`, `Hand`, `Player`, `TapDismissableDialog` — are now `.kt`, and every line number in them has moved, so grepping for one will find the wrong line or nothing at all. The file names are kept as they were rather than rewritten to `.kt`, because a `.kt` line number that is wrong is worse than a `.java` one that announces itself as historical. `CardImageAdapter` is still Java, so its references are still live.
 
 | Stage | Work | Verifiable by |
 | --- | --- | --- |
@@ -11,7 +11,7 @@ Java-to-Kotlin migration.
 | ~~2~~ | ~~JUnit tests for the pure-logic classes (Card, Penalty, GameOptions, CardPile, Hand) — done, with two corrections to the original scope: `Card` does import `android.content.Context` and `R`, and `GameOptions` has no android imports at all yet is the least testable of the five, because every method forwards to a `Prefs.get*(Context)` call. `src/test` is 7 classes / 114 tests; the four that need a Context (`GameOptions`, `Card.toString`, the save-and-resume JSON round-trips) run under Robolectric, the rest are plain JVM.~~ | ~~build #43: 114/114 passed, full pipeline green~~ |
 | ~~3~~ | ~~Convert leaf classes mechanically — `Card`, `CardDeck`, `CardPile`, `Penalty`, `GameOptions` are Kotlin. `Hand` was recorded here as unable to be converted, because it calls the package-private `Game.checkCard` and "Kotlin cannot see a Java package-private member from another file". **That was wrong, and stage 4 converted it** — see the section below.~~ | ~~build #60: 164/164 passed, full pipeline green~~ |
 | ~~4~~ | ~~`Player` hierarchy → `Game` — `Player`, `HumanPlayer`, `ComputerPlayer`, `Hand` and `Game` are all Kotlin. Every class that is not an Android view is Kotlin now; the six files still in Java are exactly stage 5's list. Two visibility widenings were forced (`Player.drawCard`, `Game.checkCard`) because Kotlin has no package-private and `internal` mangles the JVM name. Nullability is the part that would have shipped as a runtime failure. Detail below.~~ | ~~build #63: 164/164 passed, full pipeline green; re-verified on #69, 167/167, once the round loop had a test~~ |
-| 5 | Android UI last — `GameTable` is Kotlin as of build #71, so the five remaining Java files are: `GameActivity`, `Main`, `Prefs`, `CardImageAdapter`, `TapDismissableDialog` | manual on-device |
+| 5 | Android UI — three files left as of 1.4.2: `CardImageAdapter`, `Prefs`, `Main`. Done so far: `GameTable` (#71), `GameActivity` (#82, released as 1.4.1), `TapDismissableDialog` (#85, released as 1.4.2) | manual on-device |
 | 6 | Messaging: victim-centric penalty wording, the card counts in one place, and a toast for a legal play ("North threw another green 5") — detail below | manual on-device |
 | 7 | Novice mode: tap to advance after each card played, as a timed-vs-tapped choice beside `game_speed` — detail below | manual on-device |
 | 8 | Computer players: keep improving the rule-based AI, and settle the 4th seat reusing player 2's settings — detail below | manual on-device |
@@ -89,6 +89,73 @@ What was verified before the build ran: 37 of 37 methods carried over, the only 
 | Item | Work | Verifiable by |
 | --- | --- | --- |
 | ~~Convert `GameTable`~~ | ~~1,935 lines, mechanical, `m_` names and method names untouched. `m_game`/`m_go` nullable with `!!`. `Toast` collides with `android.widget.Toast` and is qualified. The two pile loops became `while`; seven `setTranslate` calls needed `.toFloat()`; one `Card(..., 0)` needed `0.0`; the `Runnable` became an object expression. Three phantom colour-specific help strings reverted to the generic ones the Java used.~~ | build #71 build-only green, #72 green: 140 unit + 27 instrumented = 167, `tested:[api34 api35 api36] skipped:[] failed:[]` |
+
+## GameActivity and TapDismissableDialog, in Kotlin
+
+Two more of stage 5's six, released as 1.4.1 and 1.4.2. Three Java files left: `CardImageAdapter`, `Prefs`, `Main`. Nothing outside those two commits had to change — `Game.kt`, `GameTable.kt`, `CardImageAdapter.java`, `Main.java` and the whole test suite are untouched by both.
+
+**`GameActivity` is constrained by reflection, and that shaped the whole file.** `GameRoundLoopTest` builds the activity with `buildActivity().get()` — so `onCreate` never runs and the game thread never starts — and then sets seven fields by name: `m_go`, `m_game`, `m_gt`, `m_btnFastForward`, `m_vMenuPanel`, `m_btnMenuDraw`, `m_btnMenuPass`. Every name has to survive, and every field has to be nullable: a nullable Kotlin property is still a plain field of the same name on the JVM (`GameOptions?` is `GameOptions`, not `Optional`), so `Field.set` is unaffected, and `onDestroy` nulls three of them anyway. The test exists precisely so that a rename fails loudly rather than as an NPE.
+
+The three `findViewById` calls spell out their type argument. Inference would have compiled, but the property is what the test sets by name, so it has to stay a `Button` field and not widen to `View`.
+
+`getBtnFastForward` returns a non-null `Button` on purpose, with the `!!` inside the getter rather than at the call site: `GameTable.kt` calls it unchecked and was not to be edited, and this throws where the Java would have thrown instead of passing null into `setVisibility`.
+
+**The hex-literal trap, seen from the other side of 1.4.0's.** `setTextColor(0xff7f7f7f)` appears four times in `showMenuButtons`. 0xff7f7f7f is 4,286,543,487, past Int32 max, so Kotlin types the literal `Long` and `setTextColor(Long)` resolves to nothing — four compile errors that a reference count would never have caught. 1.4.0 learned that literals widen to the integral types but not to `float`; this is the same rule again for `Int`. Worth having as one sentence: **a literal that overflows `Int` is a `Long`, and every Android method taking an int colour or flag wants an `Int`.**
+
+`TapDismissableDialog` is 43 lines and had exactly one interesting decision: its three fields were package-private, so they became `internal` rather than `private` — same audience, as `Game.kt` did with its own. Nothing reads them, but silently narrowing the visibility is not what a mechanical conversion should do.
+
+| Item | Work | Verifiable by |
+| --- | --- | --- |
+| ~~Convert `GameActivity`~~ | ~~366 lines. Seven reflected field names and types preserved, all nullable. `getBtnFastForward` returns non-null with `!!` inside. Four `setTextColor` literals given `.toInt()`. `WindowInsets` imported explicitly since the Java wildcard `android.view.*` is not a thing in Kotlin. Four anonymous inner classes became lambdas. The stray `};` after `onDestroy` is gone.~~ | build #82: 140 unit + 27 instrumented = 167, matrix green. Released as **1.4.1** |
+| ~~Convert `TapDismissableDialog`~~ | ~~43 lines. Three package-private fields → `internal`. 7px threshold, both ACTION branches, both `Math.abs` checks and the single `dismiss()` in the same order.~~ | build #85: 167 passed, matrix green, and the first run on the renamed AVDs. Released as **1.4.2** |
+
+## The configuration cache: two ways of enabling it that both did nothing
+
+The Gradle configuration cache is enabled and now genuinely hits, and getting there took three attempts. Worth writing down, because the failure mode is invisible — **the build is green either way.**
+
+**Attempt 1 — turn on the flag.** Gradle documents where the state lives, and it is the load-bearing fact:
+
+> The configuration cache state is stored in a `.gradle/configuration-cache` directory in the root of your Gradle build.
+
+In the *project directory*. Not the Gradle user home, where this controller keeps the distribution, the dependency cache, the AVDs and the system images, all of which the Workspace cleanup stage deliberately leaves alone. So the stage was deleting the cache before every build: every run stored an entry and never hit one, paying the write cost for none of the benefit. Enabling it alone would have made CI strictly slower.
+
+**Attempt 2 — preserve that one directory.** Stash it in `/tmp` before the wipe, copy it back after. The mechanism worked: build #78 logged 20 files, 400K, a complete entry with `entry.bin`, `work.bin` and a 30K `buildfingerprint.bin`. And Gradle still said `Calculating task graph as no cached configuration is available` on every run. `--info` did not say why — it repeated the same line with no reason attached — and cost the build 1m02s → 2m36s, so it came back out.
+
+Copying a cache in and out is evidently not the same thing to Gradle as never having moved it.
+
+**Attempt 3 — `--project-cache-dir`.** Relocate the whole project-local cache into the toolcache, so the thing that has to survive is never in the workspace. Build #80 reused the entry on both invocations; #82 reused it on all seven.
+
+**And then the win turned out to be much smaller than predicted.** Build #74 was 418s of Gradle across seven invocations; #82 was 406s. That is **12 seconds**, not the 3–9% of a pipeline that was claimed. The pipeline total appeared to drop 132s, but most of that is emulator-run variance — api34 went 49s→24s and api35 24s→36s, neither of which is configuration. The saving is real but concentrated exactly where configuration dominates:
+
+| Invocation | #74 | #82 | |
+| --- | --- | --- | --- |
+| `assembleDebug` | 18s | 15s | configuration-dominated: **−3s** |
+| `assembleRelease` | 32s | 25s | configuration-dominated: **−7s** |
+| `testDebugUnitTest` | 4m02s | 4m30s | execution-dominated: **+28s** |
+| `lintDebug` | 19s | 16s | −3s |
+| `connectedDebugAndroidTest` ×3 | 107s | 80s | device time, not configuration |
+
+So: **~12s, about 1.5% of a ten-minute pipeline.** The original estimate was too generous because it attributed configuration time to invocations that are really test-execution and device time. Recording that here rather than leaving the estimate standing, since the estimate is the thing that would otherwise be quoted next time.
+
+The larger levers remain where they were: `GameRoundLoopTest` is 4m02s because LEGACY looper mode makes every table redraw really execute, and the emulator boot polling is several minutes across three levels.
+
+`org.gradle.configuration-cache.problems=warn` is still set, and should come back to the default once a few more runs have come back clean.
+
+## Emulators are named after the job
+
+`api34`, `api35` and `api36` are now `hot-death-uno-api34` and so on. The AVD directory is shared state and an emulator is not: two builds on this controller using the same AVD name fight over the same `config.ini` and the same console port, and the loser fails in a way that reads like a device problem rather than a name collision — the most expensive kind of CI failure to diagnose, because the obvious suspect is the platform or the app. Nothing stopped another job from picking the same name, and `api34` is about as likely a second job would reach for as any.
+
+The archived per-level directories are named after the AVD too, so `instrumented-results/hot-death-uno-api34` is unambiguous about which job wrote it.
+
+The qualified suffix for non-default images is unchanged and still load-bearing: it is what stops an image swap from booting the old image while reporting the new tag's results. A bare `hot-death-uno-api37` left over from the 37.0 days would do exactly that, which is how API 37 spent so long looking like an app bug.
+
+Nothing else moved. The adb serial is `emulator-5554` regardless of the AVD name, so the boot gate, the teardown escalation and the stray-emulator sweep all still match on the `emulator-` prefix.
+
+## A build failure that was neither a test failure nor the conversion
+
+Build #81 failed on api36 with `DeviceException: No connected devices!` and **zero** test result files kept. Not a failing assertion — Gradle never got a device. The boot gate had passed: `device` state, `boot_completed`, both service checks, and a stable `system_server` PID held for 10s. The device was simply gone by the time Gradle asked.
+
+Not a regression: the same app code passed api36 in #82, and api34 and api35 passed in #81 itself. Recorded because `kept 0 result file(s)` reads like "the tests ran and nothing passed" rather than "the tests never ran", which is the opposite and much more alarming.
 
 ## Driving the round loop, and the bug that was not one
 

@@ -381,14 +381,21 @@ class GameTable private constructor(context: Context) : View(context)
 		}
 	}
 
-	private val m_touchAndHoldTask = Runnable
+	// An object expression, not Runnable { ... }. kotlin.Runnable is a SAM
+	// interface with no companion object, so there is no constructor to call and
+	// `Runnable { ... }` does not parse -- it reads as a reference to the
+	// interface. An object expression is also the closer translation of what the
+	// Java had, which was an anonymous inner class.
+	private val m_touchAndHoldTask = object : Runnable
 	{
+		override fun run()
+		{
 
 		// if something cancelled the wait (like ACTION_UP, ACTION_CANCEL, or a
 		// large enough ACTION_MOVE), we don't show card help
 		if (!m_waitingForTouchAndHold)
 		{
-			return@Runnable
+			return
 		}
 
 		m_touchAndHold = true
@@ -399,23 +406,24 @@ class GameTable private constructor(context: Context) : View(context)
 		if (!((p is HumanPlayer)
 				|| (m_game!!.getRoundComplete())))
 		{
-			return@Runnable
+			return
 		}
 
 		// only show card help for face-up cards!
 		val c = findTouchedCard (m_ptTouchDown!!)
 		if (c == null)
 		{
-			return@Runnable
+			return
 		}
 		if (!c.getFaceUp())
 		{
-			return@Runnable
+			return
 		}
 
 		val v = context.getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
 		v.vibrate (100)
 		ShowCardHelp(c)
+		}
 	}
 
 
@@ -1060,7 +1068,11 @@ class GameTable private constructor(context: Context) : View(context)
 		m_imageIDLookup.put (Card.ID_RED_0, R.drawable.card_red_0)
 		m_imageLookup.put (Card.ID_RED_0, BitmapFactory.decodeResource(res, R.drawable.card_red_0, opt))
 		m_cardHelpLookup.put (Card.ID_RED_0, R.string.cardhelp_0)
-		m_cardLookup.put (Card.ID_RED_0, Card(-1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, 0))
+		// 0.0 and not 0: the sixth argument is the point multiplier, a Double, and
+		// Kotlin will not read an integer literal as one. Java widened the int
+		// silently, so the literal is spelled out here. This is the only Card()
+		// call in the file where the Java relied on that widening.
+		m_cardLookup.put (Card.ID_RED_0, Card(-1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, 0.0))
 
 		m_imageIDLookup.put (Card.ID_RED_1, R.drawable.card_red_1)
 		m_imageLookup.put (Card.ID_RED_1, BitmapFactory.decodeResource(res, R.drawable.card_red_1, opt))

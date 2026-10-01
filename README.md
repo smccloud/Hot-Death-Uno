@@ -338,7 +338,6 @@ and drifting.
     ├── default.properties        vestigial Ant-era stub
     ├── gradlew, gradlew.bat      wrapper scripts
     ├── CHANGELOG.txt             release notes, v0.9 through v1.0.5
-    ├── TODO.txt                  open issues and completed work
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
@@ -369,7 +368,7 @@ The card art is drawn per-density, following the standard `ldpi:mdpi:hdpi:xhdpi`
 | `drawable-ldpi` | icons only | 2 |
 
 The whole art set was run through `pngquant 128`, which cut the APK from 13 MB to
-6 MB. `TODO.txt` notes that going to 64 colors was tried and looked too bad.
+6 MB. Going to 64 colours was tried and looked too bad.
 
 Card bitmaps are named `card_<color>_<value>[_<variant>].png`, and are resolved by
 `GameTable.initCards()` from an 81-entry table of card IDs — this mapping is
@@ -526,7 +525,11 @@ Three behavioral changes came with the retarget:
   generate it. See [Building](#building).
 - **Snapshot corruption is swallowed.** Both the `Game(JSONObject, ...)` constructor and
   `GameActivity` wrap deserialization in `catch (JSONException e)` with a `FIXME` and
-  no recovery, so a corrupt `gamestate` silently starts a fresh game.
+  no recovery, so a corrupt `gamestate` silently starts a fresh game. Filed as
+  [#2](https://github.com/smccloud/Hot-Death-Uno/issues/2), which takes the sharper
+  line: a partially-parsed save leaves `Game` half-built and the first `checkCard`
+  dereferences a null `m_penalty`, so it crashes on the first card played rather than
+  starting fresh.
 - **Toast durations can go negative.** `GameTable` computes the duration as
   `getDelay() - 500`, which is negative both during fast-forward (`0`) and while the
   human seat is inactive (`250`).
@@ -548,18 +551,23 @@ Three behavioral changes came with the retarget:
   `debugDeal = false`. Useful reference material for card interactions, but dead.
 - `Player.resetGame()` has a pointless `if/else` where both branches set the same value.
 
-### Open items from `TODO.txt`
+### Open items from the original author's roadmap
+
+Tracked as GitHub issues, so they have somewhere to be discussed and closed:
+
+- Clearer in-game messaging for penalties ("South draws, takes penalty") — [#3](https://github.com/smccloud/Hot-Death-Uno/issues/3)
+- A toast when a matching card is played, since it is otherwise hard to tell what
+  happened on a small table — [#4](https://github.com/smccloud/Hot-Death-Uno/issues/4)
+- An optional novice mode that taps to advance after each card played — [#5](https://github.com/smccloud/Hot-Death-Uno/issues/5)
+- Continuing AI improvements — [#6](https://github.com/smccloud/Hot-Death-Uno/issues/6)
+
+Still only prose here, not filed yet:
 
 - Scan additional card backgrounds for more realism.
-- Clearer in-game messaging for penalties ("South draws, takes penalty").
-- An optional novice mode that taps to advance after each card played.
-- A toast when a matching card is played, since it is otherwise hard to tell what
-  happened on a small table.
-- Continuing AI improvements.
 - Unresolved rules questions: whether the 1,000-point penalty needs Quitter +
   Retaliation or also Big Brother; whether Draw 2 may be stacked; whether Retaliation
   applies against Draw 2; and whether the dealer eats penalties on the first face-up
-  card.
+  card. The last of these has a `FIXME` at the top of `Game.postDealHands`.
 
 ---
 
@@ -615,8 +623,9 @@ like 1.4.0 it adds no tests. The test count itself is unchanged at 140 unit plus
 27 instrumented since 1.3.167; the minor is what records a real change, and the
 patch only has to increase so Android will accept the install.
 
-See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
-and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.
+See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history.
+Outstanding work is tracked as GitHub issues, listed under
+[Open items](#open-items-from-the-original-authors-roadmap).
 
 Upstream project history lives at <http://www.smorgasbork.com/hotdeath/>, and the
 issue tracker referenced in the changelog at

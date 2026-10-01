@@ -185,7 +185,7 @@ open class ComputerPlayer : Player
 				// otherwise, try to find the one with the highest point value
 				// so we can toss it out of our hand
 
-				// TODO: improve this AI
+				// see issue #6 for the wider AI work
 				//   - throw the mystery draw on numbered cards
 				//   - don't throw MAD when point count in hand is too high (unless player count < 4)
 				//   - consider the damage of offensive cards; look to hit players with low card counts

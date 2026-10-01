@@ -266,9 +266,9 @@ class Hand
 	{
 		for (i in 0 until m_numCards)
 		{
-			// checkCard is package-private in Game.java. That is visible from
+			// checkCard is package-private in Game.kt. That is visible from
 			// here: Kotlin resolves Java's package-private within the same
-			// package, which is all this ever needed -- see the note in TODO.md.
+			// package, which is all this ever needed.
 			if (g.checkCard(this, m_cards[i]!!, false))
 			{
 				return true

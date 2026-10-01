@@ -236,8 +236,9 @@ public class GameRoundLoopTest
 
 	/**
 	 * A total is at least this round's score, and never negative. The virus penalty
-	 * is added to a total rather than subtracted from one, which is the compounding
-	 * TODO.md records a level up; this only pins the sign and the accumulation.
+	 * is added to a total rather than subtracted from one, which is what the
+	 * compounding bug in issue #1 depends on; this only pins the sign and the
+	 * accumulation, so it passes with the bug present.
 	 */
 	private void checkScores (Game game, int round)
 	{

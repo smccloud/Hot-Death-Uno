@@ -12,7 +12,7 @@ import org.junit.runner.RunWith;
 
 /**
  * Covers how a penalty accumulates when cards are stacked, because the
- * messaging rewrite in TODO item 6 depends on exactly this: the victim draws
+ * messaging rewrite in issue #3 depends on exactly this: the victim draws
  * the running total, and a stacked card must not overwrite the card that
  * started the penalty.
  *

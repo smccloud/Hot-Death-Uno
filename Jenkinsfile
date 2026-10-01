@@ -601,8 +601,8 @@ node {
           # runs where 37 got as far as collecting tests, all 6 PenaltyStackTest
           # cases passed. The 3 MainLaunchTest failures there targeted
           # com.smccloud.hotdeath.test, which AGP had already uninstalled, so
-          # they are the same artifact TODO.md records as diagnosis 1 and not
-          # evidence against 37. TODO.md carries the traces and the untried
+          # they are the same artifact issue #8 records as diagnosis 1 and not
+          # evidence against 37. Issue #8 carries the traces and the untried
           # images.
           #
           # It cost roughly 30 minutes of boot polling per build to learn that,
@@ -703,7 +703,7 @@ node {
             # was starving. It is not: the device log shows no lowmemorykiller,
             # no OOM and no FATAL, and the install fails at 4 GB exactly as it
             # does at 2 GB. The real cause is a missing system service, which
-            # no amount of RAM supplies. See TODO.md.
+            # no amount of RAM supplies. See issue #8.
             "\$EMU" -avd "\$AVD" \\
               -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \\
               -gpu swiftshader_indirect -accel on -memory 2048 \\
@@ -860,7 +860,7 @@ node {
                 failed="\$failed \$AVD"
               else
                 echo "TESTS FAILED on \$AVD, but \$AVD is a known-failing level" >&2
-                echo "(a level that cannot launch the app's activities -- see TODO.md)" >&2
+                echo "(a level that cannot launch the app's activities -- see issue #8)" >&2
                 echo "recording it, and NOT failing the build" >&2
                 known_failed="\$known_failed \$AVD"
               fi

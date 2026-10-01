@@ -61,7 +61,7 @@ class Game private constructor() : Thread()
 	// catch (JSONException) below. Every dereference in this file is therefore
 	// `m_penalty!!`, which keeps the NullPointerException the Java threw in
 	// exactly those two cases rather than quietly papering over them with a
-	// default. See the note in TODO.md.
+	// default. See issue #2.
 	private var m_penalty: Penalty? = null
 
 	private var m_lastCardCheckedIsDefender = false

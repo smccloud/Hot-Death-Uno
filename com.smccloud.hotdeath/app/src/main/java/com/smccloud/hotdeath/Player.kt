@@ -43,7 +43,8 @@ open class Player
 
 	// Never assigned anywhere in the buildable sources -- the only reference is
 	// in Game.java.new, which is not a .java file and so is not compiled.
-	// Kept because getChangedLastClicked() is public API; see TODO.md.
+	// Kept because getChangedLastClicked() is public API; see the README's
+	// dead and vestigial code section.
 	protected var m_changedLastClicked: Card? = null
 
 	constructor(g: Game?, go: GameOptions?)

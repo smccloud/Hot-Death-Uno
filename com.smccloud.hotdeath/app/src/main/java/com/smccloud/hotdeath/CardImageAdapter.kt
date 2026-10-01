@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.view.View
 import android.widget.ImageView
 import android.widget.GridView
+import android.widget.AbsListView
 
 // getView's two ViewGroup/View parameters are platform types on the Android
 // side, so Kotlin lets the nullability be declared here rather than inherited.
@@ -88,7 +89,13 @@ class CardImageAdapter(c: Context) : BaseAdapter()
 		if (convertView == null) {  // if it's not recycled, initialize some attributes
 			imageView = ImageView(mContext)
 			val scale = imageView.context.resources.displayMetrics.density
-			imageView.setLayoutParams(GridView.LayoutParams((85 * scale + 0.5f).toInt(), (85 * scale + 0.5f).toInt()))
+			// AbsListView.LayoutParams, not GridView.LayoutParams as the Java had
+			// it. GridView declares no nested LayoutParams of its own -- it inherits
+			// AbsListView's -- and Java resolves an inherited nested class through
+			// the subclass name. Kotlin does not, so the same spelling is an
+			// unresolved reference here. Same class either way; only the name it is
+			// reachable under changed.
+			imageView.setLayoutParams(AbsListView.LayoutParams((85 * scale + 0.5f).toInt(), (85 * scale + 0.5f).toInt()))
 			imageView.setScaleType(ImageView.ScaleType.CENTER_CROP)
 			imageView.setPadding(8, 8, 8, 8)
 		} else {

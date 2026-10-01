@@ -308,7 +308,15 @@ class GameActivity : Activity()
 				val cia = (parent as GridView).adapter as CardImageAdapter
 				val cardids = cia.getCardIDs()
 
-				this.m_gt!!.setHelpCardID (cardids[position])
+				// `!!` on the index, and this is a consequence of CardImageAdapter
+				// becoming Kotlin rather than a change of its own. That class used to
+				// return a Java Integer[], which Kotlin sees as the platform type
+				// Array<Int!>! -- assignable to Int without complaint. It now declares
+				// Array<Int?> honestly, because it is built with arrayOfNulls and
+				// filled from GameTable's own nullable array. The JVM signature is
+				// identical either way; only what Kotlin can see changed, and the
+				// Java auto-unboxed at this exact line.
+				this.m_gt!!.setHelpCardID (cardids[position]!!)
 				//this.showDialog(DIALOG_CARD_HELP);
 				showCardHelp();
 			});

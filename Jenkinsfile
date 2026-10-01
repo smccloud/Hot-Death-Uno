@@ -1119,6 +1119,25 @@ node {
             echo "  tap text '\$label' at \$(( (\$1 + \$3) / 2 )),\$(( (\$2 + \$4) / 2 ))" >&2
             "\$ADB" shell input tap \$(( (\$1 + \$3) / 2 )) \$(( (\$2 + \$4) / 2 ))
           }
+          tap_first () {  # tap_first <grep-pattern>
+            # Taps the first node matching a pattern rather than the centre of a
+            # container, because those are not the same point. A GridView's
+            # gutters between columns are touch-transparent, so a tap at the
+            # container's centre can land in one and reach the container instead
+            # of a cell: no item click, no dialog, and two byte-identical
+            # screenshots. That is not hypothetical. The gridview spans
+            # [125,68][955,1842], so its centre was x=540, and the columns end at
+            # 521 and resume at 558 -- 540 sits in that 36px gutter.
+            #
+            # The catalog's cells are ImageViews with no resource-id, which is
+            # what makes this the only way to reach one.
+            local pattern="\$1" b
+            b=\$(node_bounds "\$pattern")
+            if [ -z "\$b" ]; then echo "  WARN: no node matching \$pattern" >&2; return 1; fi
+            set -- \$b
+            echo "  tap \$pattern at \$(( (\$1 + \$3) / 2 )),\$(( (\$2 + \$4) / 2 ))" >&2
+            "\$ADB" shell input tap \$(( (\$1 + \$3) / 2 )) \$(( (\$2 + \$4) / 2 ))
+          }
           wait_id () {  # wait_id <resource-id suffix> <tries>
             local i=0 b
             while [ "\$i" -lt "\$2" ]; do
@@ -1167,11 +1186,26 @@ node {
           sleep 4
           shot 03-card-catalog dump
 
-          # Tapping a cell in the grid sets the help card and opens the dialog,
-          # per GameActivity.showCardCatalog's item click.
-          tap_id gridview
+          # Tapping a cell in the grid sets the help card and opens the dialog, per
+          # GameActivity.showCardCatalog's item click. The cell, not the gridview:
+          # the gridview's centre falls in a gutter between columns.
+          tap_first 'class="android\.widget\.ImageView"'
           sleep 3
           shot 04-card-help dump
+
+          # The dialog opening is the whole point of the shot, so verify it rather
+          # than trust it. Two of these screenshots were once byte-identical and
+          # nothing in the log said why; a distinct hash and a visible view are
+          # the difference between evidence and hope.
+          if cmp -s "\$OUT/03-card-catalog.png" "\$OUT/04-card-help.png"; then
+            echo "ERROR: 04-card-help.png is identical to 03-card-catalog.png," >&2
+            echo "       so the cell tap did not open the help dialog." >&2
+            exit 1
+          fi
+          if ! grep -q 'id/text' "\$OUT/04-card-help.xml"; then
+            echo "ERROR: the help dialog text view is not on screen in 04" >&2
+            exit 1
+          fi
 
           ls -l "\$OUT"
           COUNT=\$(ls -1 "\$OUT"/*.png | wc -l)

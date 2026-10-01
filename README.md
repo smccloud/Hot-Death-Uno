@@ -360,7 +360,7 @@ and drifting.
             │       ├── values/       strings.xml, arrays.xml, colors.xml
             │       ├── xml/          preferences.xml
             │       └── drawable-*/   692 PNGs, 8.3 MB across 5 density buckets
-            ├── test/kotlin/com/smccloud/hotdeath/          140 tests, Robolectric
+            ├── test/kotlin/com/smccloud/hotdeath/          142 tests, Robolectric
             └── androidTest/kotlin/com/smccloud/hotdeath/   9 tests, needs a device
 ```
 

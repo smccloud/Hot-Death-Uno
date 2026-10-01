@@ -101,6 +101,66 @@ class GameRoundLoopTest
 		}
 	}
 
+	/**
+	 * The green 3 is charged once, in the round it was picked up.
+	 *
+	 * Pinned directly rather than left to the random deal in the round-loop
+	 * invariants above, because whether any green 3 is in anybody's hand at the
+	 * end of a round is not something a test gets to choose -- and on a deal
+	 * with no green 3 in it, the compounding never fires and the invariant
+	 * passes with or without the bug. Here the field is set by hand to what a
+	 * green 3 in round 1 would leave behind, and round 2 must not charge it
+	 * again.
+	 *
+	 * Two rounds is what it takes: the field is charged in `finishRound` at the
+	 * end of a round, so setting it before round 1 would just be scored in
+	 * round 1 and never read again. Setting it between the two rounds puts it
+	 * exactly where a round-1 infection would be when round 2 is scored.
+	 */
+	@Test
+	fun anInfectionIsNotChargedAgainInTheNextRound ()
+	{
+		val game = newGame(false)
+		game.startGame()
+
+		driveRound(game)
+
+		// What round 1 leaves behind if a green 3 was in a hand when it ended.
+		for (i in 0 until 4)
+		{
+			game.getPlayer(i)!!.setVirusPenalty(10)
+		}
+
+		game.startRound()
+		driveRound(game)
+
+		checkTheVirusPenaltyIsThisRounds(game, 1)
+	}
+
+	/**
+	 * resetRound clears the field, which is the whole of the fix.
+	 *
+	 * The scoring-level test above goes through `finishRound` and reads back a
+	 * total, so it depends on several things lining up. This one asserts the
+	 * reset directly: a round boundary has to take the infection with it.
+	 */
+	@Test
+	fun startingARoundClearsTheVirusPenalty ()
+	{
+		val game = newGame(false)
+		game.startGame()
+
+		for (i in 0 until 4)
+		{
+			val p = game.getPlayer(i)!!
+			p.setVirusPenalty(20)
+			game.startRound()
+			assertEquals("seat ${p.getSeat()} still owes an infection from "
+					+ "the last round", 0, p.getVirusPenalty())
+			p.setVirusPenalty(20)
+		}
+	}
+
 	// ---------------------------------------------------------------- the round
 
 	/** Plays `count` whole rounds, checking the invariants after each. */
@@ -123,6 +183,7 @@ class GameRoundLoopTest
 			checkNoCardsWereLost(game, round)
 			checkEveryHandIsFaceUp(game, round)
 			checkTheDealerWonTheRound(game, round)
+			checkTheVirusPenaltyIsThisRounds(game, round)
 			checkScores(game, round)
 
 			// At 1000 the game is over and there is no next round to deal.
@@ -237,10 +298,12 @@ class GameRoundLoopTest
 	}
 
 	/**
-	 * A total is at least this round's score, and never negative. The virus penalty
-	 * is added to a total rather than subtracted from one, which is what the
-	 * compounding bug in issue #1 depends on; this only pins the sign and the
-	 * accumulation, so it passes with the bug present.
+	 * A total is at least this round's score, and never negative.
+	 *
+	 * Only the sign and the accumulation. The virus penalty is added to a total
+	 * rather than subtracted from one, so a total can only be inflated by the
+	 * compounding bug -- and that is pinned by the check above, which reads the
+	 * charge back against the hand it should have come from.
 	 */
 	private fun checkScores (game: Game, round: Int)
 	{
@@ -252,6 +315,65 @@ class GameRoundLoopTest
 			assertTrue("seat ${p.getSeat()} totals ${p.getTotalScore()}"
 				+ " but only scored ${p.getLastScore()} this round",
 				p.getTotalScore() >= p.getLastScore())
+		}
+	}
+
+	/**
+	 * The infection is charged once, for the round it was picked up in.
+	 *
+	 * calculateScore sets lastVirusPenalty to the player's whole virusPenalty
+	 * and adds it to the total, and Hand.calculateValue is what accumulates it --
+	 * 10 per green 3 held at the end of the round. So after a round the charge
+	 * must be exactly 10 times the green 3s in that hand, and nothing carried
+	 * over from before: the field used to be cleared only by resetGame(), so a
+	 * green 3 picked up in round 1 was charged again in round 2, and the total
+	 * grew by the whole accumulated penalty every round after. Issue #1.
+	 *
+	 * Two kinds of player are exempt, and both are deliberate. The winner,
+	 * because calculateScore sets their lastVirusPenalty to 0 outright -- the
+	 * winner is the dealer by the time this runs, since finishRound assigns
+	 * m_dealer before calling calculateScore. And anyone holding all four
+	 * bastard cards, because calculateScore scores that hand as 0 without ever
+	 * calling calculateValue on it, so nothing is ever added to their penalty.
+	 * That second one is reachable for a player who did not win: advanceRound
+	 * stops at the first player it finds with an empty hand or the full set, so
+	 * a seat earlier in the table can end the round before the bastard-card
+	 * holder is looked at.
+	 *
+	 * Hands are face up by now (checked above), and the green 3 stays in the hand
+	 * it was scored from, so the hand is the record of what was charged.
+	 */
+	private fun checkTheVirusPenaltyIsThisRounds (game: Game, round: Int)
+	{
+		val winner = game.getDealer()!!.getSeat()
+
+		for (i in 0 until 4)
+		{
+			val p = game.getPlayer(i)!!
+			val h = p.getHand()!!
+
+			if (p.getSeat() == winner || game.checkForAllBastardCards(h))
+			{
+				assertEquals("seat ${p.getSeat()} was charged ${p.getLastVirusPenalty()} "
+						+ "after round $round but is exempt from the infection",
+					0, p.getLastVirusPenalty())
+				continue
+			}
+
+			var green3s = 0
+			for (j in 0 until h.getNumCards())
+			{
+				if (h.getCard(j)!!.getID() == Card.ID_GREEN_3_AIDS)
+				{
+					green3s++
+				}
+			}
+
+			assertEquals("seat ${p.getSeat()} was charged ${p.getLastVirusPenalty()} "
+					+ "after round $round, holding $green3s green 3s. A charge from an "
+					+ "earlier round is being billed again: ${p.getTotalScore()} total, "
+					+ "${p.getLastScore()} scored, ${p.getLastVirusPenalty()} penalty.",
+				green3s * 10, p.getLastVirusPenalty())
 		}
 	}
 

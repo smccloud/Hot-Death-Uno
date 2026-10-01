@@ -206,6 +206,24 @@ open class Player
 			}
 		}
 
+		// The green 3 is worth 10 to whoever is left holding it when the round
+		// ends, and Game.calculateScore adds this field to the round total at
+		// that point -- so it is a charge for one round, not a running total.
+		// Hand.calculateValue is what accumulates it, and the only thing that
+		// ever cleared it was resetGame(), which runs once per game. Without
+		// this, a green 3 picked up in round 1 was charged again in round 2 with
+		// no green 3 in sight, and the total grew by the whole accumulated
+		// penalty every round after that. See #1.
+		//
+		// Cleared here rather than in calculateScore because that is the only
+		// place the charge happens: every round runs resetRound() (via
+		// Game.startRound()) before it can be scored, so clearing at the round
+		// boundary makes the field mean "infections this round" everywhere,
+		// rather than being a field that one call site has to remember to drain.
+		// The winner's exemption in calculateScore is left as it is -- that is a
+		// separate rule, and the clue that the charge was meant to be per-round.
+		m_virusPenalty = 0
+
 		m_hand = Hand(this)
 		m_active = true
 		m_passing = false
@@ -214,7 +232,9 @@ open class Player
 	fun resetGame()
 	{
 		m_lastScore = 0
-		m_virusPenalty = 0
+		// m_virusPenalty used to be cleared here and nowhere else, which is
+		// what let it compound across rounds -- resetRound() below now clears
+		// it, and this game reset calls that.
 		if (android.os.Debug.isDebuggerConnected())
 		{
 			m_totalScore = 0

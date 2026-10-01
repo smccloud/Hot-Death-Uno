@@ -242,10 +242,36 @@ Version 1.4.7                unreleased
    the seat-index round trip is what makes Hand(null) legal, so tightening Hand
    breaks one assertion rather than forty call sites
 
- - the reflection helpers in HandPlayabilityTest and GameRoundLoopTest now say
+- the reflection helpers in HandPlayabilityTest and GameRoundLoopTest now say
    out loud that f.set bypasses Kotlin's intrinsic null checks, which is why
    the AssertionError on a renamed field is the only guard there is
 
- - no application code changed. The test count is unchanged at 140 unit plus 9
-   instrumented
-     
+ - BUG FIX. The green 3 infection was charged again in every round after the
+   one it was picked up in, and the running total grew by the whole accumulated
+   penalty each time. A player who picked up a green 3 in round 1 paid 10 again
+   in round 2 with no green 3 in sight, 20 again in round 3, and so on for the
+   rest of the game
+
+   Hand.calculateValue accumulating 10 per green 3 on a final score is correct
+   and is untouched -- two cards, two infections. The compounding was one level
+   up: Game.calculateScore adds the player's whole getVirusPenalty() to their
+   round total, and nothing cleared that field between rounds. Only
+   Player.resetGame() did, and that runs once per game. resetRound() now clears
+   it, which is the round boundary and where the field's other round-scoped
+   state already resets
+
+   The winner was exempt from the charge, which was the one hint this was not
+   meant to compound. That exemption is left as it is -- it is a separate rule
+
+ - GameRoundLoopTest now pins the charge against the hand it should have come
+   from: after a round, lastVirusPenalty must be exactly 10 per green 3 in that
+   hand, for everyone but the winner and anyone holding all four bastard cards.
+   The check runs on the random deal, which is not enough on its own -- on a
+   deal with no green 3 in it the bug never fires -- so two further tests set
+   the field by hand and drive two rounds around it
+
+ - test count is 142 unit plus 9 instrumented. The two Hand-level tests that
+   cover the accumulation, theVirusPenaltyAccumulates and
+   theAidsCardInfectsOnlyOnTheFinalScore, both pass and both stay passing: the
+   bug was never on that side
+      

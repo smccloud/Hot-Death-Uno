@@ -1217,10 +1217,11 @@ node {
       }
     }
     archiveArtifacts artifacts: "${moduleDir}/app/build/screenshots/*.png",
-                     allowEmptyArchive: false, fingerprint: true
-    # The uiautomator dumps travel with the PNGs. They are only interesting when
-    // a screenshot is wrong, and they are the only record of what was actually on
-    # screen when it was wrong.
+allowEmptyArchive: false, fingerprint: true
+    // The uiautomator dumps travel with the PNGs. They are only interesting
+    // when a screenshot is wrong, and they are the only record of what was
+    // actually on screen when it was wrong. Groovy accepts a # comment only in
+    // column 0, so this is // like every other comment in the file.
     archiveArtifacts artifacts: "${moduleDir}/app/build/screenshots/*.xml",
                      allowEmptyArchive: true, fingerprint: true
   }

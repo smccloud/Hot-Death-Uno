@@ -19,10 +19,17 @@
     With neither switch the parameter is not sent at all, so the job's own
     default applies -- which is what you want when you have not an opinion.
 
+.PARAMETER Screenshots
+    Boot an emulator, drive the app, and archive the README screenshots.
+    Given to the job as SCREENSHOTS=true. Off by default: the stage costs a
+    whole extra emulator boot and nothing in the build depends on it, so it is
+    only worth turning on when those images actually need refreshing.
+
 .EXAMPLE
     .\jenkins.ps1 login
     .\jenkins.ps1 status
     .\jenkins.ps1 build -NoTests
+    .\jenkins.ps1 build -NoTests -Screenshots
     .\jenkins.ps1 build -NoWait
 #>
 [CmdletBinding()]
@@ -42,6 +49,8 @@ param(
     # RUN_TESTS, tri-state: neither switch means "do not send the parameter".
     [switch] $Tests,
     [switch] $NoTests,
+
+    [switch] $Screenshots,
 
     [string] $StorePath = $(if ($env:JENKINS_CREDS) { $env:JENKINS_CREDS } else { Join-Path $PSScriptRoot 'jenkins-creds.xml' })
 )
@@ -137,20 +146,19 @@ switch ($Command) {
         # job that declares a parameter refuses a bare POST to /build, and one
         # that declares none accepts this just the same, so there is no need to
         # detect which kind this is.
-        $body = $null
+        # A Hashtable so that both parameters go up in one request, since Jenkins
+        # takes the last value it is given for a repeated key.
+        $body = @{}
         $label = ''
-        if ($Tests) {
-            $body = @{ 'RUN_TESTS' = 'true' }
-            $label = ' (RUN_TESTS=true)'
-        }
-        elseif ($NoTests) {
-            $body = @{ 'RUN_TESTS' = 'false' }
-            $label = ' (RUN_TESTS=false)'
-        }
+        if ($Tests) { $body['RUN_TESTS'] = 'true'; $label += ' RUN_TESTS=true' }
+        elseif ($NoTests) { $body['RUN_TESTS'] = 'false'; $label += ' RUN_TESTS=false' }
+        # SCREENSHOTS is only sent when asked for, because the job defaults it to
+        # false and sending it explicitly on every build would be noise.
+        if ($Screenshots) { $body['SCREENSHOTS'] = 'true'; $label += ' SCREENSHOTS=true' }
 
-        if ($body) {
+        if ($body.Count -gt 0) {
             # ContentType stated rather than left to PS 5.1 to guess: a hashtable
-            # body is what carries RUN_TESTS, and Jenkins reads it as form fields.
+            # body is what carries these, and Jenkins reads it as form fields.
             $resp = Invoke-WebRequest -Uri "$Base/buildWithParameters" -Method Post -Body $body `
                 -ContentType 'application/x-www-form-urlencoded' -Headers $hdr -UseBasicParsing
         }

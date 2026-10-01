@@ -44,7 +44,18 @@ properties([[$class: 'BuildDiscarderProperty',
                  name: 'RUN_TESTS',
                  defaultValue: true,
                  description: 'Run unit tests, lint, and the API 34-36 emulator matrix. Off = build and sign only.']
-              ]]])
+                ],
+                // Screenshots are a documentation asset, not a gate, so they are
+                // off by default: they cost a whole extra emulator boot and
+                // nothing in the build depends on them. Turn it on when the
+                // README images actually need refreshing, which should be the
+                // only time they are ever regenerated -- a screenshot that
+                // changes because someone re-ran a build is churn.
+                [$class: 'BooleanParameterDefinition',
+                 name: 'SCREENSHOTS',
+                 defaultValue: false,
+                 description: 'Boot an emulator, drive the app, and archive the README screenshots. Off = skip entirely.']
+              ]])
 
 node {
   def moduleDir = 'com.smccloud.hotdeath'
@@ -91,6 +102,10 @@ node {
   // a run queued before the parameter was added.
   def runTests = (params.RUN_TESTS == true) || (params.RUN_TESTS == 'true')
   echo "RUN_TESTS=${runTests} (false = build and sign only)"
+  // Same three states as RUN_TESTS above, including absent on a run queued
+  // before the parameter existed.
+  def screenshots = (params.SCREENSHOTS == true) || (params.SCREENSHOTS == 'true')
+  echo "SCREENSHOTS=${screenshots}"
 
   // Destroys the signing material, wherever it happens to be. Defined once and
   // called at both ends of the run: the pre-clean and the teardown have to agree
@@ -952,6 +967,200 @@ node {
     // interesting when something has already gone wrong.
     archiveArtifacts artifacts: "${moduleDir}/app/build/failure-diagnostics/**/report.txt",
                      allowEmptyArchive: true, fingerprint: true
+  }
+  }
+
+  // README images. Off by default and not a gate -- see the SCREENSHOTS
+  // parameter for why. It installs the *release* APK rather than the debug one,
+  // because these are pictures of what people actually download, and it drives
+  // the UI by resource id rather than by coordinates, so it keeps working when
+  // a layout moves.
+  //
+  // Navigation is the awkward part, and it is awkward because the game is
+  // genuinely random: the dealer is picked at random, so the "how many cards do
+  // you want to deal?" dialog only appears when a human happens to deal. And the
+  // options menu -- which is the only route to the card catalog -- is only
+  // visible on the human's turn. Both are handled by waiting for the view we
+  // need to appear rather than by assuming a fixed sequence, and the screenshot
+  // is taken of whatever state the app is genuinely in.
+  if (screenshots) {
+  stage('Screenshots') {
+    withEnv(["ANDROID_HOME=${sdkHome}", "ANDROID_SDK_ROOT=${sdkHome}"]) {
+      dir(moduleDir) {
+        sh """
+          set -eu
+          CACHE="\${JENKINS_HOME:-/var/lib/jenkins}/.toolcache/hotdeath"
+          SDK="\$ANDROID_HOME"
+          AVDHOME="\$CACHE/avd"
+          ADB="\$SDK/platform-tools/adb"
+          EMU="\$SDK/emulator/emulator"
+          export ANDROID_AVD_HOME="\$AVDHOME"
+          OUT=app/build/screenshots
+          APK=app/build/outputs/apk/release/app-release.apk
+          PKG=com.smccloud.hotdeath
+          # api35, not the first level in the matrix: the image is the one that
+          # has booted reliably most often here, and if this ever runs
+          # concurrently with the Emulator stage it will not collide either.
+          AVD=hot-death-uno-api35
+          mkdir -p "\$OUT"
+          rm -f "\$OUT"/*.png
+
+          ACCEL="\$("\$EMU" -accel-check 2>&1 || true)"
+          case "\$ACCEL" in
+            *"installed and usable"*) ;;
+            *) echo "KVM is unusable for the jenkins user" >&2; echo "\$ACCEL" >&2; exit 1 ;;
+          esac
+
+          "\$EMU" -avd "\$AVD" \\
+            -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \\
+            -gpu swiftshader_indirect -accel on -memory 2048 \\
+            > "\$CACHE/emulator-\$AVD.log" 2>&1 &
+          EMU_PID=\$!
+
+          # The same settle gate the Emulator stage uses: device state, boot
+          # completed, both services answering, and a system_server PID that
+          # holds for 10s. Shortened to one round, because a failure here is
+          # reported loudly rather than retried across a matrix.
+          booted=0
+          for _ in \$(seq 1 120); do
+            if "\$ADB" devices | awk '\$1 ~ /^emulator-/ && \$2 == "device"' | grep -q . \\
+               && [ "\$("\$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r\\n')" = '1' ] \\
+               && "\$ADB" shell 'service check activity' 2>/dev/null | grep -qx 'Service activity: found' \\
+               && "\$ADB" shell 'service check package' 2>/dev/null | grep -qx 'Service package: found'; then
+              pid_a="\$("\$ADB" shell pidof system_server 2>/dev/null | tr -d '\\r\\n')"
+              sleep 10
+              pid_b="\$("\$ADB" shell pidof system_server 2>/dev/null | tr -d '\\r\\n')"
+              if [ -n "\$pid_a" ] && [ "\$pid_a" = "\$pid_b" ]; then
+                booted=1
+                echo "\$AVD settled: system_server pid \$pid_a held for 10s" >&2
+                break
+              fi
+            fi
+            sleep 3
+          done
+          if [ "\$booted" != '1' ]; then
+            echo "ERROR: \$AVD did not boot; screenshots cannot be taken" >&2
+            tail -c 2000 "\$CACHE/emulator-\$AVD.log" >&2 || true
+            exit 1
+          fi
+
+          # --- helpers -------------------------------------------------------
+          # uiautomator dump is how the script finds a view. It only reports
+          # nodes that are currently visible and laid out, which is exactly the
+          # property the game needs: the options menu is INVISIBLE until the
+          # human's turn, so polling for it is how we know the turn arrived
+          # without hard-coding a wait.
+          ui_dump () {
+            "\$ADB" shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
+            "\$ADB" shell cat /sdcard/ui.xml 2>/dev/null | sed 's/></>\\n</g'
+          }
+          node_bounds () {  # node_bounds <grep-pattern>
+            ui_dump | grep -m1 "\$1" \\
+              | sed -n 's/.*bounds="\\[\\([0-9]*\\),\\([0-9]*\\)\\]\\[\\([0-9]*\\),\\([0-9]*\\)\\]".*/\\1 \\2 \\3 \\4/p'
+          }
+          tap_id () {  # tap_id <resource-id suffix>
+            local label="\$1" b
+            b=\$(node_bounds "resource-id=\"[^\"]*id/\$label\"")
+            if [ -z "\$b" ]; then echo "  WARN: no visible view with id/\$label" >&2; return 1; fi
+            set -- \$b
+            # \$label, not \$1: the set -- above has already reused \$1 for the
+            # first coordinate, so echoing \$1 here printed the x offset and not
+            # the view that was tapped.
+            echo "  tap \$label at \$(( (\$1 + \$3) / 2 )),\$(( (\$2 + \$4) / 2 ))" >&2
+            "\$ADB" shell input tap \$(( (\$1 + \$3) / 2 )) \$(( (\$2 + \$4) / 2 ))
+          }
+          tap_text () {  # tap_text <exact text>
+            local label="\$1" b
+            b=\$(node_bounds "text=\"\$label\"")
+            if [ -z "\$b" ]; then echo "  (no visible node with text '\$label' -- skipping)" >&2; return 0; fi
+            set -- \$b
+            echo "  tap text '\$label' at \$(( (\$1 + \$3) / 2 )),\$(( (\$2 + \$4) / 2 ))" >&2
+            "\$ADB" shell input tap \$(( (\$1 + \$3) / 2 )) \$(( (\$2 + \$4) / 2 ))
+          }
+          wait_id () {  # wait_id <resource-id suffix> <tries>
+            local i=0 b
+            while [ "\$i" -lt "\$2" ]; do
+              b=\$(node_bounds "resource-id=\"[^\"]*id/\$1\"")
+              if [ -n "\$b" ]; then return 0; fi
+              i=\$((i+1)); sleep 2
+            done
+            echo "  WARN: gave up waiting for id/\$1" >&2
+            return 1
+          }
+          shot () {  # shot <name>
+            "\$ADB" exec-out screencap -p > "\$OUT/\$1.png"
+            echo "  captured \$1.png (\$(wc -c < "\$OUT/\$1.png") bytes)" >&2
+          }
+
+          # --- capture -------------------------------------------------------
+          # Release APK, not debug: these are pictures of the shipped build, and
+          # using the minified artifact is also a second confirmation that R8
+          # did not take anything out of the UI.
+          "\$ADB" install -r -t "\$APK"
+          "\$ADB" shell am start -W -n "\$PKG/.Main" >&2
+          sleep 5
+          shot 01-main
+
+          tap_id btn_new_game
+          sleep 3
+          # Only present when the dealer is human, which is a coin flip. Best
+          # effort by design: a miss is not an error.
+          tap_text 7
+          sleep 2
+
+          # The options menu becomes visible on the human's turn. Waiting for it
+          # is how we know we are there, and it doubles as settling the board.
+          wait_id btn_menu_help 15
+          sleep 2
+          shot 02-table
+
+          tap_id btn_menu_help
+          sleep 4
+          shot 03-card-catalog
+
+          # Tapping a cell in the grid sets the help card and opens the dialog,
+          # per GameActivity.showCardCatalog's item click.
+          tap_id gridview
+          sleep 3
+          shot 04-card-help
+
+          ls -l "\$OUT"
+          COUNT=\$(ls -1 "\$OUT"/*.png | wc -l)
+          echo "captured \$COUNT screenshot(s)"
+          if [ "\$COUNT" -lt 3 ]; then
+            echo "ERROR: only \$COUNT of the screenshots were captured" >&2
+            exit 1
+          fi
+
+          "\$ADB" emu kill > /dev/null 2>&1 || true
+          kill "\$EMU_PID" > /dev/null 2>&1 || true
+          torn_down=0
+          attempt=0
+          while [ "\$attempt" -lt 30 ]; do
+            attempt=\$((attempt + 1))
+            if [ -z "\$("\$ADB" devices | awk '\$1 ~ /^emulator-/' || true)" ]; then
+              torn_down=1; break
+            fi
+            sleep 2
+            if [ "\$attempt" = 15 ]; then
+              "\$ADB" kill-server > /dev/null 2>&1 || true
+              "\$ADB" start-server > /dev/null 2>&1 || true
+              kill -9 "\$EMU_PID" > /dev/null 2>&1 || true
+              for pid in \$(pgrep -f 'qemu-system' || true); do
+                kill -9 "\$pid" > /dev/null 2>&1 || true
+              done
+            fi
+          done
+          if [ "\$torn_down" != '1' ]; then
+            echo "\$AVD did not shut down; refusing to continue" >&2
+            "\$ADB" devices >&2 || true
+            exit 1
+          fi
+        """
+      }
+    }
+    archiveArtifacts artifacts: "${moduleDir}/app/build/screenshots/*.png",
+                     allowEmptyArchive: false, fingerprint: true
   }
   }
 

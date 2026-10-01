@@ -1049,17 +1049,40 @@ node {
           # property the game needs: the options menu is INVISIBLE until the
           # human's turn, so polling for it is how we know the turn arrived
           # without hard-coding a wait.
+          #
+          # uiautomator writes quoted attributes -- resource-id=".../btn_menu_help"
+          # -- so every pattern below needs a literal double quote in it. Writing
+          # that quote with a shell backslash in front of it does not work, and did
+          # not: Groovy consumes the backslash and hands the shell
+          # resource-id=".../btn_menu_help" with the quotes no longer escaped. That
+          # is unbalanced quoting, and dash does not complain about it where it is
+          # -- build #97 died on a "(" eighty lines later that was never the
+          # problem. Q carries the character instead, so no escaped quote crosses
+          # the Groovy boundary at all.
+          Q='"'
           ui_dump () {
             "\$ADB" shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
             "\$ADB" shell cat /sdcard/ui.xml 2>/dev/null | sed 's/></>\\n</g'
           }
           node_bounds () {  # node_bounds <grep-pattern>
-            ui_dump | grep -m1 "\$1" \\
-              | sed -n 's/.*bounds="\\[\\([0-9]*\\),\\([0-9]*\\)\\]\\[\\([0-9]*\\),\\([0-9]*\\)\\]".*/\\1 \\2 \\3 \\4/p'
+            # awk rather than sed, and the program is single-quoted, so the double
+            # quotes in the regex are literal to the shell and only the \\[] need
+            # to survive Groovy.
+            ui_dump | grep -m1 "\$1" | awk '
+              match(\$0, /bounds="\\[[0-9]+,[0-9]+\\]\\[[0-9]+,[0-9]+\\]"/) {
+                b = substr(\$0, RSTART, RLENGTH)
+                gsub(/[^0-9]+/, " ", b)
+                # The bracket and comma runs become spaces, which leaves one at
+                # each end. Harmless for set --, but trim so the value is exactly
+                # "x1 y1 x2 y2" and nothing downstream has to know that.
+                sub(/^ +/, "", b)
+                sub(/ +$/, "", b)
+                print b
+              }'
           }
           tap_id () {  # tap_id <resource-id suffix>
             local label="\$1" b
-            b=\$(node_bounds "resource-id=\"[^\"]*id/\$label\"")
+            b=\$(node_bounds "resource-id=\${Q}[^\${Q}]*id/\${label}")
             if [ -z "\$b" ]; then echo "  WARN: no visible view with id/\$label" >&2; return 1; fi
             set -- \$b
             # \$label, not \$1: the set -- above has already reused \$1 for the
@@ -1070,7 +1093,7 @@ node {
           }
           tap_text () {  # tap_text <exact text>
             local label="\$1" b
-            b=\$(node_bounds "text=\"\$label\"")
+            b=\$(node_bounds "text=\${Q}\${label}\${Q}")
             if [ -z "\$b" ]; then echo "  (no visible node with text '\$label' -- skipping)" >&2; return 0; fi
             set -- \$b
             echo "  tap text '\$label' at \$(( (\$1 + \$3) / 2 )),\$(( (\$2 + \$4) / 2 ))" >&2
@@ -1079,7 +1102,7 @@ node {
           wait_id () {  # wait_id <resource-id suffix> <tries>
             local i=0 b
             while [ "\$i" -lt "\$2" ]; do
-              b=\$(node_bounds "resource-id=\"[^\"]*id/\$1\"")
+              b=\$(node_bounds "resource-id=\${Q}[^\${Q}]*id/\${1}")
               if [ -n "\$b" ]; then return 0; fi
               i=\$((i+1)); sleep 2
             done

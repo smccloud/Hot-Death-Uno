@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.3.167 (`versionCode` 1003167) |
+| Current version | 1.4.0 (`versionCode` 1004000) |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Java 17 and Kotlin, JDK 17 target (no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -310,11 +310,11 @@ never exercised on a device.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1003167
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004000
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/main/
             ├── AndroidManifest.xml
-            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (6 Java, 10 Kotlin)
+            ├── java/com/smccloud/hotdeath/    16 classes, ~8,300 lines (5 Java, 11 Kotlin)
             └── res/
                 ├── layout/       7 XML layouts + layout-land/
                 ├── values/       strings.xml, arrays.xml, colors.xml
@@ -347,7 +347,8 @@ hand-maintained and must be extended whenever a card is added.
 
 ## Architecture
 
-Sixteen classes, ~7,600 lines of Java, no third-party libraries. There is no MVP/MVVM
+Sixteen classes, ~8,300 lines, no third-party libraries — five Java, eleven Kotlin.
+There is no MVP/MVVM
 layering; the game engine and the view are deliberately coupled.
 
 ```
@@ -368,7 +369,7 @@ Main ──> GameActivity ──> GameTable (View, custom Canvas drawing)
 | Class | Lines | Role |
 |---|---|---|
 | **`Game`** | 2,062 | The rules engine *and* the game thread. Owns the deck, both piles, the four players, the active penalty, and the turn loop. Reaches the UI only through `runOnUiThread` and `GameTable.getString()`. |
-| **`GameTable`** | 1,817 | The entire board, drawn by hand on a `Canvas` — no layout XML. Handles portrait/landscape geometry, per-seat hand placement and drag scrolling, pile rendering, direction and color indicators, scores, aggressor/victim emoticons, card-count badges, hit testing, long-press card help, and the color/victim/deal dialogs. |
+| **`GameTable`** | 1,922 | The entire board, drawn by hand on a `Canvas` — no layout XML. Handles portrait/landscape geometry, per-seat hand placement and drag scrolling, pile rendering, direction and color indicators, scores, aggressor/victim emoticons, card-count badges, hit testing, long-press card help, and the color/victim/deal dialogs. |
 | **`CardDeck`** | 796 | Card factory and registry. `reset(standardRules, oneDeck)` builds every card by enumeration, then `shuffle()` permutes a parallel `m_oCards` array so the canonical `m_cards` array stays in ID order for the UI. |
 | **`ComputerPlayer`** | 517 | The AI. See [AI behavior](#ai-behavior). |
 | **`Hand`** | 472 | A player's cards plus the eleven-step scoring pass in `calculateValue()`. |
@@ -559,7 +560,7 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.3.167, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.0, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 From 1.1.0 the patch number is the count of passing tests in the build that produced
@@ -572,7 +573,8 @@ patch`, which leaves three digits each for the minor and the patch.
 release that adds no tests has no new patch number to move to, and 1.1.143 had gone
 out signed with the debug key, which Android refuses to replace with a differently
 signed build at the same `versionCode` — so the minor carries releases until the test
-count moves again.
+count moves again. 1.4.0 is the same case: it converts `GameTable` to Kotlin and adds
+no tests, so the count is still 140 + 27 and the minor is what moved.
 
 See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history
 and [`TODO.txt`](com.smccloud.hotdeath/TODO.txt) for the original author's roadmap.

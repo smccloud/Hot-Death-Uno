@@ -1189,7 +1189,7 @@ node {
           # Tapping a cell in the grid sets the help card and opens the dialog, per
           # GameActivity.showCardCatalog's item click. The cell, not the gridview:
           # the gridview's centre falls in a gutter between columns.
-          tap_first 'class="android\.widget\.ImageView"'
+          tap_first 'class="android\\.widget\\.ImageView"'
           sleep 3
           shot 04-card-help dump
 

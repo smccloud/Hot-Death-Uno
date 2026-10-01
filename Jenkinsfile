@@ -895,7 +895,8 @@ node {
             # window, so the next level would have booted alongside it. So
             # escalate rather than hope: kill the console, then the process,
             # then force it, and only believe the list once it is empty.
-            "\$ADB" emu kill > /dev/null 2>&1 || true
+"\$ADB" emu kill > /dev/null 2>&1 || true
+          kill "\$EMU_PID" > /dev/null 2>&1 || true
             kill "\$EMU_PID" > /dev/null 2>&1 || true
             torn_down=0
             attempt=0
@@ -1043,6 +1044,25 @@ node {
             exit 1
           fi
 
+          # --- capture resolution --------------------------------------------
+          # The CI AVDs are 320x640, which is right for running tests and wrong
+          # for a README: a 320px image in a browser is a postage stamp, and this
+          # game's whole appeal is how the cards look.
+          #
+          # wm size overrides the display for this session only and the AVD on
+          # disk is untouched, so nothing the emulator matrix depends on moves.
+          # 1080x2160 at xhdpi (320) is an ordinary phone geometry, so the layout
+          # is the one a real device would show rather than an upscaled version
+          # of the CI one.
+          #
+          # Best effort throughout. If the override is refused the shots are just
+          # the AVD's native size, which is smaller but still correct, and failing
+          # the whole documentation stage over it would be the wrong trade.
+          "\$ADB" shell wm size 1080x2160 > /dev/null 2>&1 || true
+          "\$ADB" shell wm density 320 > /dev/null 2>&1 || true
+          sleep 4
+          echo "  display now \$("\$ADB" shell wm size 2>/dev/null | tr -d '\\r\\n')" >&2
+
           # --- helpers -------------------------------------------------------
           # uiautomator dump is how the script finds a view. It only reports
           # nodes that are currently visible and laid out, which is exactly the
@@ -1109,7 +1129,14 @@ node {
             echo "  WARN: gave up waiting for id/\$1" >&2
             return 1
           }
-          shot () {  # shot <name>
+          shot () {  # shot <name> [dump]
+            # An optional second argument writes the uiautomator dump alongside
+            # the PNG. When a screenshot comes out wrong the PNG alone cannot say
+            # why -- two of them were byte-identical and nothing in the log said
+            # what was on screen. The dump is what turns that into a cause.
+            if [ -n "\${2:-}" ]; then
+              ui_dump > "\$OUT/\$1.xml"
+            fi
             "\$ADB" exec-out screencap -p > "\$OUT/\$1.png"
             echo "  captured \$1.png (\$(wc -c < "\$OUT/\$1.png") bytes)" >&2
           }
@@ -1138,13 +1165,13 @@ node {
 
           tap_id btn_menu_help
           sleep 4
-          shot 03-card-catalog
+          shot 03-card-catalog dump
 
           # Tapping a cell in the grid sets the help card and opens the dialog,
           # per GameActivity.showCardCatalog's item click.
           tap_id gridview
           sleep 3
-          shot 04-card-help
+          shot 04-card-help dump
 
           ls -l "\$OUT"
           COUNT=\$(ls -1 "\$OUT"/*.png | wc -l)
@@ -1154,8 +1181,16 @@ node {
             exit 1
           fi
 
+          # Put the display back before the emulator goes away. wm size writes to the
+          # running system and can be picked up by a saved snapshot, and these
+          # AVDs are shared with the API 34-36 instrumented matrix -- a 1080x2160
+          # display leaking into those runs would be a failure a long way from
+          # here. The reset is best effort for the same reason the override is:
+          # the emulator is about to be killed either way.
+          "\$ADB" shell wm size reset > /dev/null 2>&1 || true
+          "\$ADB" shell wm density reset > /dev/null 2>&1 || true
+
           "\$ADB" emu kill > /dev/null 2>&1 || true
-          kill "\$EMU_PID" > /dev/null 2>&1 || true
           torn_down=0
           attempt=0
           while [ "\$attempt" -lt 30 ]; do
@@ -1183,6 +1218,11 @@ node {
     }
     archiveArtifacts artifacts: "${moduleDir}/app/build/screenshots/*.png",
                      allowEmptyArchive: false, fingerprint: true
+    # The uiautomator dumps travel with the PNGs. They are only interesting when
+    // a screenshot is wrong, and they are the only record of what was actually on
+    # screen when it was wrong.
+    archiveArtifacts artifacts: "${moduleDir}/app/build/screenshots/*.xml",
+                     allowEmptyArchive: true, fingerprint: true
   }
   }
 

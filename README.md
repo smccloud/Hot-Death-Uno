@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.13 (`versionCode` 1004013) |
+| Current version | 1.4.14 (`versionCode` 1004014), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -251,13 +251,46 @@ Defined in `res/xml/preferences.xml` and read through `GameOptions`.
 
 *Skill* controls how much of the heuristic the AI is allowed to use:
 
-- **Weak (0)** — scores candidates by `getCurrentValue()` only.
+The AI is rule-based throughout. Every decision is a score, and it never plays a
+card that `Game.checkCard` says is illegal, so the interesting question is never
+whether a play is legal but which legal play it picks.
+
+- **Weak (0)** — scores candidates by `getCurrentValue()` only, so it unloads
+  whichever legal card is worth the most points. That is why it throws a Draw Four
+  early: `Hand.calculateValue` puts the card at 50, and 50 beats a 5.
 - **Strong (1, 2)** — plays a defensive card immediately if one is legal; otherwise
-  maximizes hand value. Holds onto wild cards late in the hand. Special-cases the
-  M.A.D. card, the 69, and Mystery Wild (Mystery is thrown preferentially on high
-  numbers, and at a 69 above everything else).
-- **Expert (2)** — additionally evaluates the change in the standard deviation of the
-  four suit counts, so it will hold a bad color balance to keep an even one.
+  scores the rest and takes the best. Special-cases the M.A.D. card, the 69, and
+  Mystery Wild (Mystery is thrown preferentially on high numbers, and at a 69 above
+  everything else).
+- **Expert (2)** — adds three things to that: a colour-balance score, the tie-break
+  that goes with it, and a colour lead chosen against the table rather than against
+  itself.
+
+**Holding on to wilds.** A wild scores -60 at Strong and above — below the worst any
+other card can reach, since the Magic 5 is -5 and the M.A.D. card can be -20 — and
+above the -1000 that an unplayable hand scores, so a wild is played when the hand is
+otherwise stuck and held otherwise. The one exception is an opponent on their last
+card, where a wild is the only card in the deck that can change the colour at will.
+
+**Colour balance, and the tie-break.** `computeColorBalance` measures how lopsided
+the four suit counts are. Expert already scored a card by how much playing it would
+improve that, and now uses it to *break a tie* as well: two cards of equal score are
+decided by the play that leaves the hand most even. Which of two identical cards gets
+played is therefore no longer the order of the hand array.
+
+**Counting the table.** When a seat names a colour, Expert charges each colour for
+what the opponents are likely to be holding, and a colour it holds nothing of is
+never named. The deck is a known list of cards, so subtracting this seat's hand and
+the face-up discard pile leaves the cards that are either in the draw pile or in
+somebody's hand; the draw pile's share is discounted, which makes the estimate
+tighten as the round runs and stay silent while the deck is still mostly unknown.
+Each opponent contributes its chance of holding the colour, weighted by 4/(cards+1)
+so that a player on their last card costs more than one with a full hand, and each
+colour is scored as `cards held - pressure`.
+
+Nothing in there reads another player's hand. The deck holds references to the same
+`Card` objects the hands do, so counting them would be a sharper answer than a player
+at the table could have.
 
 *Aggression* biases victim selection toward the human's seat and gates the expert
 color-balance heuristic — a Sadist (`+6`) will wait out a color imbalance until the
@@ -607,8 +640,6 @@ Three behavioral changes came with the retarget:
 
 Tracked as GitHub issues, so they have somewhere to be discussed and closed:
 
-- An optional novice mode that taps to advance after each card played — [#5](https://github.com/smccloud/Hot-Death-Uno/issues/5)
-- Continuing AI improvements — [#6](https://github.com/smccloud/Hot-Death-Uno/issues/6)
 - Scan additional card backgrounds for more realism — [#9](https://github.com/smccloud/Hot-Death-Uno/issues/9)
 - Unresolved rules questions: whether the 1,000-point penalty needs Quitter +
   Retaliation or also Big Brother; whether Draw 2 may be stacked; whether Retaliation
@@ -619,6 +650,10 @@ Tracked as GitHub issues, so they have somewhere to be discussed and closed:
 
 The full list of what was converted from `TODO.md`, and the reasoning for grouping it,
 is in the commit message for [`5403f01`](https://github.com/smccloud/Hot-Death-Uno/commit/5403f01).
+Two of those five are now closed and gone from the list above: the novice mode
+([#5](https://github.com/smccloud/Hot-Death-Uno/issues/5), shipped in 1.4.13) and the
+Expert AI ([#6](https://github.com/smccloud/Hot-Death-Uno/issues/6)), which is the
+last of the author's stage-7 items.
 
 ---
 

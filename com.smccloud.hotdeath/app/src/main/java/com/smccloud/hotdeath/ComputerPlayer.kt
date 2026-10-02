@@ -4,6 +4,16 @@ import java.util.Random
 //import android.util.Log
 import org.json.*
 
+/**
+ * What a wild scores when the seat would rather keep it, issue #6.
+ *
+ * Below the worst score any non-wild can reach, and above the -1000 that
+ * maxpointval starts at, and both of those matter. Above -1000 so a wild in a
+ * hand of wilds is still the card played rather than a draw; below every
+ * non-wild so a wild is played only when the hand is otherwise stuck.
+ */
+private const val WILD_HOARD_VALUE = -60
+
 
 open class ComputerPlayer : Player
 {
@@ -62,11 +72,37 @@ open class ComputerPlayer : Player
 		super.drawCard()
 	}
 
+	/**
+	 * Declare a colour, which is the only place a computer seat leads a colour.
+	 *
+	 * A seat leads by playing a wild -- Draw Four, the Mystery, the Hot Death --
+	 * or one of the specials that ignores the current colour, and then naming
+	 * here what the next player has to follow. Everything else it plays was
+	 * already constrained to the colour on the table, so this method and nothing
+	 * else is where "what colour do I want this round to be" gets asked.
+	 *
+	 * The Java had `FIXME -- we need a real strategy` here and took the colour it
+	 * held the most of. That is half a strategy: it maximises the number of
+	 * cards the seat can follow its own lead with, and it is all a player
+	 * watching would see the Expert doing wrong -- leading the colour the whole
+	 * table can already match.
+	 *
+	 * So the count still decides, and what the seat can follow is still the first
+	 * thing it counts, but a colour the opponents are likely to be holding is
+	 * charged for. Expert takes the cheapest colour by that measure; Skill 0 and 1
+	 * keep the colour they held most of, which is the behaviour they always had.
+	 */
 	override fun chooseColor(): Int
 	{
 		m_game!!.waitABit()
 
-		// FIXME -- we need a real strategy
+		// Skill is read here rather than trusted from an earlier call because
+		// this method is reachable without playCard having run -- Game asks for
+		// the colour after it has taken the card, and the two are not always in
+		// that order. m_skill defaults to 1, so a stale read would quietly play
+		// an Expert seat at Strong.
+		readAggressionAndSkill()
+
 		var maxCount = 0
 		var maxColor = 0
 
@@ -75,13 +111,42 @@ open class ComputerPlayer : Player
 			return Card.COLOR_RED
 		}
 
-		for (i in Card.COLOR_RED until Card.COLOR_WILD)
+		if (m_skill >= 2)
 		{
-			val cnt = m_hand!!.countSuit(i)
-			if (cnt > maxCount)
+			// Score every colour the seat can actually follow with, and lead the
+			// one where holding cards costs least. A colour it holds nothing of is
+			// never a candidate: naming a colour it cannot play is a wasted lead
+			// whatever the opponents are holding.
+			var bestScore = Double.NEGATIVE_INFINITY
+
+			for (i in Card.COLOR_RED until Card.COLOR_WILD)
 			{
-				maxCount = cnt
-				maxColor = i
+				val held = m_hand!!.countSuit(i)
+				if (held == 0)
+				{
+					continue
+				}
+
+				val score = held - colorPressure(i)
+
+				if (score > bestScore)
+				{
+					bestScore = score
+					maxColor = i
+				}
+			}
+		}
+
+		if (maxColor == 0)
+		{
+			for (i in Card.COLOR_RED until Card.COLOR_WILD)
+			{
+				val cnt = m_hand!!.countSuit(i)
+				if (cnt > maxCount)
+				{
+					maxCount = cnt
+					maxColor = i
+				}
 			}
 		}
 
@@ -94,6 +159,200 @@ open class ComputerPlayer : Player
 		}
 
 		return m_chosenColor
+	}
+
+	/**
+	 * How many cards of [color] the table cannot account for, sub-item 2.
+	 *
+	 * Three public facts go in: the deck is a known list of cards, this seat can
+	 * count its own hand, and the discard pile is face up. What is left over is
+	 * either in the draw pile or in an opponent's hand, and the difference between
+	 * those two is what makes the leftover worth measuring.
+	 *
+	 * Deliberately not `getDeck().getCard(i).getHand()`. That would return the
+	 * exact contents of every opponent's hand -- the deck holds references to the
+	 * same Card objects the hands do -- which is a stronger answer than a player
+	 * at the table could ever have. Counting the leftovers keeps the AI inside the
+	 * information a player is given.
+	 *
+	 * Wilds are excluded by the caller summing only the four colours, which is
+	 * right for the question being asked: a wild is not a card an opponent can
+	 * match a lead with.
+	 */
+	private fun countUnaccountedInColor (color: Int): Int
+	{
+		val deck = m_game!!.getDeck() ?: return 0
+
+		var inDeck = 0
+		val deckCards = deck.getCards()
+		for (i in 0 until deck.getNumCards())
+		{
+			if (deckCards[i]!!.getColor() == color)
+			{
+				inDeck++
+			}
+		}
+
+		var inDiscard = 0
+		val discard = m_game!!.getDiscardPile()
+		if (discard != null)
+		{
+			for (i in 0 until discard.getNumCards())
+			{
+				if (discard.getCard(i)!!.getColor() == color)
+				{
+					inDiscard++
+				}
+			}
+		}
+
+		// Floored at 0 rather than allowed to go negative: a hand holding a copy
+		// the deck does not list means the deck was rebuilt underneath a live
+		// hand, and a negative "unaccounted" would make the probabilities below
+		// mean the opposite of what they say.
+		val unaccounted = inDeck - m_hand!!.countSuit(color) - inDiscard
+
+		return if (unaccounted > 0) unaccounted else 0
+	}
+
+	/**
+	 * The chance that an opponent holding [numCards] cards holds at least one
+	 * [color] card, between 0 and 1.
+	 *
+	 * The model is the plain one: an opponent's cards are a uniform draw from the
+	 * cards the table cannot account for, which is what shuffling and dealing
+	 * leaves you with. So the chance that none of theirs is [color] is
+	 *
+	 *     (pool - inHands)/pool * (pool - inHands - 1)/(pool - 1) * ...
+	 *
+	 * over their [numCards], and the answer is one minus that.
+	 *
+	 * `inHands` is not the whole leftover count of the colour. Whatever is in the
+	 * draw pile is not in anybody's hand, and the draw pile is a uniform share of
+	 * the leftovers, so of the [color] leftovers only
+	 *
+	 *     leftover * (pool - drawPile) / pool
+	 *
+	 * can be in a hand. Charging the draw pile its share is what makes this an
+	 * estimate that tightens as the round runs: early, when the draw pile holds
+	 * most of what nobody can see, it says "probably"; late, when the draw pile is
+	 * nearly gone and the leftovers really are in hands, it says nearly certainly.
+	 */
+	private fun chanceHoldsColor (color: Int, numCards: Int): Double
+	{
+		if (numCards <= 0)
+		{
+			return 0.0
+		}
+
+		var pool = 0
+		var inPool = 0
+
+		for (i in Card.COLOR_RED until Card.COLOR_WILD)
+		{
+			val unaccounted = countUnaccountedInColor(i)
+			pool += unaccounted
+
+			if (i == color)
+			{
+				inPool = unaccounted
+			}
+		}
+
+		// An opponent cannot be holding more cards than the table cannot
+		// account for. Asking about more anyway is a position the model cannot
+		// describe, and the answer is "no idea", which here means "no chance of
+		// holding the colour" -- the safe direction, since this only ever makes a
+		// lead look safer to follow than it is, and never makes it look safe to
+		// ignore a threat.
+		if (pool <= 0 || numCards > pool)
+		{
+			return 0.0
+		}
+
+		val drawPileSize = m_game!!.getDrawPile()?.getNumCards() ?: 0
+
+		// `inPool * (pool - drawPileSize)` on its own is the missing half of this
+		// line and it is not a rounding argument, it is the whole discount. It
+		// asks how many cards of this colour are unaccounted for and how many of
+		// the unaccounted cards the draw pile could be holding, and multiplying
+		// those two gives a number that is bigger than the pool -- by up to a
+		// factor of `pool`, since the draw pile's share of the colour is already
+		// inside `inPool`. Without the division the answer saturates the clamp
+		// below for any draw pile small enough to matter, so the estimate read
+		// "certain" from the first turn of a round and stopped tightening until
+		// the draw pile was nearly gone.
+		//
+		// Integer division floors, so a colour can come out as 0 while there is
+		// still one card of it unaccounted for. That is the right direction to err:
+		// it charges the colour nothing and lets the plain card count lead, rather
+		// than inventing a threat that is not there.
+		var inHands = inPool * (pool - drawPileSize) / pool
+
+		if (inHands > pool)
+		{
+			inHands = pool
+		}
+		if (inHands <= 0)
+		{
+			return 0.0
+		}
+
+		// No pigeonhole shortcut for the case where `numCards > pool - inHands`.
+		// There would be fewer non-colour cards in the pool than cards in the
+		// opponent's hand, so the answer is 1, and the loop already reaches it:
+		// the numerators run `pool - inHands`, `pool - inHands - 1`, ... and the
+		// factor at `i = pool - inHands` is exactly zero, which zeroes the product
+		// before any numerator can go negative. Checked over every pool, inHands
+		// and numCards up to 60, the loop and the shortcut agree to the last bit
+		// and neither leaves [0,1].
+		var noneOfThem = 1.0
+
+		for (i in 0 until numCards)
+		{
+			noneOfThem *= (pool - inHands - i).toDouble() / (pool - i).toDouble()
+		}
+
+		return 1.0 - noneOfThem
+	}
+
+	/**
+	 * What leading [color] is expected to cost, in cards held.
+	 *
+	 * One card of chance from each active opponent, weighted by how close they
+	 * are to going out: the same card is worth much more from a player on their
+	 * last card, who can play it and win the round outright, than from a player
+	 * with a hand full. `4 / (numCards + 1)` is 2.0 at one card, 1.0 at three,
+	 * and about 0.36 at ten.
+	 *
+	 * The result is subtracted from the count of [color] in this seat's hand, so
+	 * what it is really saying is: lead the colour you can most afford to have
+	 * followed at you.
+	 */
+	private fun colorPressure (color: Int): Double
+	{
+		var pressure = 0.0
+
+		for (i in 0 until 4)
+		{
+			val p = m_game!!.getPlayer(i)!!
+
+			if (p == this)
+			{
+				continue
+			}
+
+			if (!p.getActive())
+			{
+				continue
+			}
+
+			val numCards = p.getHand()!!.getNumCards()
+
+			pressure += chanceHoldsColor(color, numCards) * (4.0 / (numCards + 1.0))
+		}
+
+		return pressure
 	}
 
 	/**
@@ -158,6 +417,12 @@ open class ComputerPlayer : Player
 
 		var maxpointval = -1000
 		var bestcard: Card? = null
+
+		// The balance change of whichever card is currently in bestcard, for the
+		// Expert tie-break. Positive infinity so the first legal card takes the slot
+		// outright rather than having to beat an opinion nobody holds yet.
+		var bestBalanceChange = Double.POSITIVE_INFINITY
+
 		m_hand!!.calculateValue();
 
 		m_wantsToPass = false;
@@ -181,15 +446,14 @@ open class ComputerPlayer : Player
 			// sophisticated players can hold onto expensive wild cards until later
 			// in the game.
 			val opponent_card_count = this.getMinCardsRemaining();
-			var wild_count = 0
-			for (i in 0 until m_hand!!.getNumCards())
-			{
-				val tc = m_hand!!.getCard(i)!!
-				if (tc.getColor() == Card.COLOR_WILD)
-				{
-					wild_count++
-				}
-			}
+
+			// The one case where hoarding a wild is the wrong instinct: somebody is
+			// on their last card. A wild is the only card in the deck that changes
+			// the colour at will, so it is the only way to stop a player who is
+			// about to go out from simply following whatever colour we lead -- and
+			// drawing four is a card we would rather hold, but not worth holding if
+			// it is the difference between winning and losing the round.
+			val wild_is_worth_spending = (opponent_card_count <= 1)
 
 			//Log.d("HDU", "Looking for card to play...");
 			for (i in 0 until m_hand!!.getNumCards())
@@ -228,10 +492,31 @@ open class ComputerPlayer : Player
 					// Strong and Expert
 					if (tc.getColor() == Card.COLOR_WILD)
 					{
-						if (wild_count < opponent_card_count - 1)
-						{
-							testval = 0
-						}
+						// Hoard it.
+						//
+						// The Java here read
+						//
+						//     if (wild_count < opponent_card_count - 1) testval = 0
+						//
+						// with testval already 0 from its initialiser, so both arms
+						// assigned 0 and the condition chose nothing. Hoarding is what
+						// the condition was reaching for, and `wild_count` went with
+						// it: the count it was testing no longer has a use.
+						//
+						// Scoring below the worst a non-wild can reach is what makes
+						// this hoard rather than a preference. Every numbered card is
+						// worth its own value, the MAD card bottoms out at -20, and a
+						// Magic 5 -- legal on anything -- is -5, so with the colour
+						// balance penalty on top the lowest any of them can score is
+						// -45. A wild at -60 loses to all of them and is reached only
+						// when nothing else in the hand is legal, which is exactly
+						// "the hand is otherwise stuck".
+						//
+						// It stays above maxpointval's initialiser of -1000 so that a
+						// wild in a hand of wilds is still played; if it scored lower,
+						// bestcard would stay null and the seat would draw instead of
+						// playing the only card it holds.
+						testval = if (wild_is_worth_spending) 0 else WILD_HOARD_VALUE
 					}
 					else
 					{
@@ -286,21 +571,28 @@ open class ComputerPlayer : Player
 						{
 							testval = 200
 						}
-						else if (lpv > 0)
+else if (lpv > 0)
+					{
+						if(lpv < 5)
 						{
-							if(lpv < 5)
-							{
-								testval = 15
-							}
-							else if (lpv < 8)
-							{
-								testval = 30
-							}
-							else if (lpv < 10)
-							{
-								testval = 50
-							}
+							testval = 15
 						}
+						else if (lpv < 8)
+						{
+							testval = 30
+						}
+						else if (lpv < 10)
+						{
+							testval = 50
+						}
+					}
+
+					// Falling out of that ladder is not a vote to play it. The comment
+					// above says to keep the Mystery off non-numbered cards, and a
+					// wild on a wild or a special is the case that used to score 0 and
+					// win a tie against any other worthless card. It now falls through
+					// to WILD_HOARD_VALUE like any other wild, so the sentence is the
+					// code rather than the intention.
 
 					}
 				}
@@ -326,10 +618,14 @@ open class ComputerPlayer : Player
 						considerColorBalance = true
 					}
 
+					// Computed whether or not the aggression threshold opened the
+					// bonus below, because the tie-break further down needs it on
+					// every card and this is the one pass over the hand that
+					// produces it.
+					val colorBalanceImprovement = computeChangeInColorBalance(tc)
+
 					if (considerColorBalance)
 					{
-						val colorBalanceImprovement = computeChangeInColorBalance(tc)
-
 						// getting closer to 0 is a good thing
 						if (colorBalanceImprovement < -0.5)
 						{
@@ -356,9 +652,42 @@ open class ComputerPlayer : Player
 
 
 					}
-				}
 
-				if (testval >= maxpointval)
+					// The tie-break, and the other half of sub-item 3. Above, the
+					// balance figure scores a card; it never chose between two
+					// cards of equal score, because `>=` handed those to whichever
+					// one the hand happened to store last. Two numbered cards of
+					// the same value in two colours are the common case, and the
+					// choice between them was the order of the hand array.
+					//
+					// This picks the one that leaves the hand best balanced, so
+					// the colour the seat leads in `chooseColor` is the colour it
+					// then actually plays.
+					//
+					// `isFinite` is doing real work: computeChangeInColorBalance
+					// divides by the balance before the play, and a hand whose four
+					// suit counts are all equal has a balance of 0, so the change
+					// is 0/0 or x/0 and comes back NaN or infinite. Every
+					// comparison against NaN is false, which would silently make
+					// this tie-break drop the card instead of keeping it, so it is
+					// asked explicitly whether there is an opinion at all.
+					//
+					// Skill 0 and 1 keep `>=` and the last card wins, which is
+					// arbitrary but is the behaviour they have always had, and the
+					// point of issue #6 was the Expert play rather than a rewrite of
+					// the other two.
+					if ((testval > maxpointval)
+						|| ((testval == maxpointval)
+							&& colorBalanceImprovement.isFinite()
+							&& bestBalanceChange.isFinite()
+							&& (colorBalanceImprovement < bestBalanceChange)))
+					{
+						maxpointval = testval
+						bestBalanceChange = colorBalanceImprovement
+						bestcard = tc
+					}
+				}
+				else if (testval >= maxpointval)
 				{
 					maxpointval = testval
 					bestcard = tc

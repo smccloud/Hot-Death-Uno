@@ -572,3 +572,95 @@ Version 1.4.13               2026-10-02
    in the order onTouchEvent makes them both release and decide the draw
 
  - test count is 182 unit plus 9 instrumented
+
+
+Version 1.4.14               unreleased
+
+ - Expert AI, issue #6: hoard wilds, count what the opponents are holding, and
+   lead a colour chosen against the table rather than against itself. The last of
+   the original author's stage-7 items
+
+ - a wild scores -60 for Strong and above. That is below the worst any other card
+   can reach -- the Magic 5 is -5, the MAD card can be -20 -- so a wild goes out
+   when the hand is otherwise stuck and stays in hand otherwise, and above the
+   -1000 that maxpointval starts at, so a hand of wilds still plays one rather
+   than drawing. The Java had "if (wild_count < opponent_card_count - 1) testval
+   = 0" with testval already 0 from its initialiser, so both arms assigned 0 and
+   the condition chose nothing. Hoarding is what the condition was reaching for.
+   wild_count went with it: nothing tests it any more
+
+ - one exception to the hoard, and it is the reason the old condition mentioned
+   the opponents' card count at all: an opponent on their last card. A wild is
+   the only card in the deck that changes the colour at will, so it is the only
+   way to stop somebody who is about to go out from simply following the lead
+
+ - the Mystery wild now falls out of its own ladder onto the hoard score when it
+   has no opinion. Its comment already said to keep it off non-numbered cards; a
+   wild on a wild used to score 0 and win a tie against any other worthless card.
+   The sentence is now the code
+
+ - sub-item 2: countUnaccountedInColor works out what each opponent might hold
+   from the deck, this seat's hand, and the discard pile. It deliberately does not
+   ask the deck which hand a card is in, because the deck holds references to the
+   same Card objects the hands do and counting them would be a sharper answer
+   than a player at the table could have
+
+ - sub-item 3: chooseColor's "FIXME -- we need a real strategy" is answered. The
+   colour a seat holds most of is half a strategy -- it maximises what the seat
+   can follow its own lead with, and it is all a player watching would see the
+   Expert doing wrong, since it leads the colour the whole table can already
+   match. Expert still counts, and still prefers the colour it can keep playing,
+   but a colour the opponents are likely to hold is now charged for, and a colour
+   the seat holds nothing of is never named
+
+ - the charge is a probability over cards the table cannot account for, with the
+   draw pile's share discounted by how much of it the pile could hold. That is
+   what makes it tighten as the round runs and stay quiet while the deck is
+   mostly unknown: at the top of a round the draw pile holds nearly everything
+   nobody can see, so "this opponent is probably holding red" is not yet worth
+   changing a play for. Each opponent is weighted 4/(cards+1), so a player on
+   their last card costs more than one with a full hand
+
+ - two bugs found while writing the tests, both in the new code. The draw-pile
+   discount was missing its / pool, so it saturated for any draw pile small
+   enough to matter and read "certain" from the first turn of a round. And a
+   pigeonhole shortcut I added for opponents holding more cards than there are
+   other colours turned out to be redundant: the product's own zero factor
+   already reaches 1.0 there, checked over every pool, inHands and numCards up to
+   60, so the shortcut went back out
+
+ - sub-item 3 also wanted the colour balance to *choose* a lead rather than just
+   score one. Two cards of equal score are now decided by the play that leaves
+   the hand most even, so which of two identical cards gets played is no longer
+   the order of the hand array. Skill 0 and 1 keep >= and the last card wins --
+   arbitrary, but the behaviour they have always had
+
+ - the isFinite check in that tie-break is doing real work.
+   computeChangeInColorBalance divides by the balance before the play, and a hand
+   with one card of each colour has a balance of exactly 0, so the result is an
+   infinity rather than a number. Unguarded, comparisons against it would either
+   drop every candidate or favour whichever card was scanned first, for no
+   reason. AnEvenHandFallsBackToHandOrder pins that
+
+ - the other three TODO comments in playCard are still there: throwing the mystery
+   draw on numbered cards, MAD when the hand's points are too high, and offensive
+   cards against players on low card counts. The first two are done and the
+   third is now half done by the colour pressure, but they are the author's
+   notes and rewriting them as if they were a specification would be a claim
+   about work nobody has done
+
+ - AiStrategyTest, 21 tests, 203 unit. The suite had nothing that could see which
+   card the AI picks -- HandPlayabilityTest covers legality and
+   GameRoundLoopTest asserts invariants, never decisions -- so every one of these
+   is a decision a plausible-looking edit would change. The fixture is a real
+   round off the real 216-card deck, because calculateValue is what supplies the
+   point values the MAD and Draw Four scores are read from
+
+ - each of the eight behaviours was checked by breaking it on purpose and
+   confirming something fails. That found two tests that pinned nothing: a "the
+   Expert holds a wild" test that a wild scoring 0 would also have passed, and a
+   pigeonhole test that passed with the whole colour strategy switched off. The
+   first is now merged into a test that says plainly it is the weak version, and
+   the second is gone
+
+ - test count is 203 unit plus 9 instrumented

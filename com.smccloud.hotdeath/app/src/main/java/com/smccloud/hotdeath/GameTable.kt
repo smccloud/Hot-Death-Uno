@@ -534,6 +534,13 @@ class GameTable private constructor(context: Context) : View(context)
 
 			m_waitingForTouchAndHold = false
 
+			// First, because it is the one tap that means the same thing wherever
+			// it lands: a novice-mode pause is waiting, and this touch is the
+			// player's answer to it. Cleared here, before the pile and hand
+			// handling, so the rest of the UP handler goes on to do whatever else
+			// the touch was on -- releasing this one does not swallow it.
+			m_game!!.tableTapped ()
+
 			// if we haven't moved from the card we originally touched down on,
 			// we'll play that card.
 			if (heldSteadyHand())

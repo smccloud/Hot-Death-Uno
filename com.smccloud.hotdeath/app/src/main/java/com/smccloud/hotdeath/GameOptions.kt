@@ -45,6 +45,16 @@ class GameOptions(private var m_ga: GameActivity?)
 		return Prefs.getP3AggressionLevel(m_ga)
 	}
 
+	/**
+	 * Novice mode on: every timed pause becomes a wait for a tap.
+	 *
+	 * Off by default, so this reads the same shape as every other preference here.
+	 */
+	fun getNoviceMode(): Boolean
+	{
+		return Prefs.getNoviceMode(m_ga)
+	}
+
 	fun getPauseLength(): Int
 	{
 		return Prefs.getGameSpeed(m_ga)

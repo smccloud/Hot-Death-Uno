@@ -9,6 +9,11 @@
            android:entries="@array/game_speeds"
            android:entryValues="@array/game_speed_values" />   
 	<CheckBoxPreference
+		android:key="novice_mode"
+		android:title="@string/novice_mode_title"
+		android:summary="@string/novice_mode_summary"
+		android:defaultValue="false" />
+	<CheckBoxPreference
 		android:key="two_decks"
 		android:title="@string/two_decks_title"
 		android:summary="@string/two_decks_summary"

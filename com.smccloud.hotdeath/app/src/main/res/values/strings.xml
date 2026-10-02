@@ -185,6 +185,14 @@
 	<string name="game_speed_3">Slow</string>
 	<string name="game_speed_4">Very slow</string>
 
+	<!-- Novice mode. The choice is between the two ways the game already pauses:
+	     game_speed gives a timed delay, this waits for a tap. It is a
+	     checkbox rather than another game_speed value because game_speed is a
+	     number of milliseconds and two readers want exactly that. -->
+	<string name="novice_mode_title">Novice mode</string>
+	<string name="novice_mode_summary">Pause after each play and wait for a tap instead of a timed delay</string>
+	<string name="msg_tap_to_continue">Tap the table to continue</string>
+
 	<string name="standard_rules_title">Standard rules</string>
 	<string name="standard_rules_summary">Disable special cards; play standard rules</string>
 

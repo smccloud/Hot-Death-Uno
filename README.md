@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.12 (`versionCode` 1004012) |
+| Current version | 1.4.13 (`versionCode` 1004013), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -237,6 +237,7 @@ Defined in `res/xml/preferences.xml` and read through `GameOptions`.
 | Setting | Key | Default | Values |
 |---|---|---|---|
 | Game speed | `game_speed` | `1` (Fast) | 0 Very fast … 4 Very slow |
+| Novice mode | `novice_mode` | `false` | Pause for a tap instead of a timed delay, so play can be followed at your own pace |
 | Two decks | `two_decks` | `false` | 108-card or 216-card deck |
 | Computer 4th | `computer_4th` | `false` | Let the AI take the South seat at the *North* player's difficulty (for testing — it leaves no human in the game) |
 | Face up | `face_up` | `false` | Reveal all cards — useful for learning |
@@ -376,7 +377,7 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004012
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004013
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/
             ├── main/
@@ -579,8 +580,11 @@ Three behavioral changes came with the retarget:
   resumed one — and the unreadable string is cleared so `Continue` stops offering a
   save that is known to be unreadable. See [#2](https://github.com/smccloud/Hot-Death-Uno/issues/2).
 - **Toast durations can go negative.** `GameTable` computes the duration as
-  `getDelay() - 500`, which is negative both during fast-forward (`0`) and while the
-  human seat is inactive (`250`).
+  `m_game.getDelay() - 500`, which is negative during fast-forward (`0`) and while the
+  human seat is inactive (`250`); the platform then treats it as `LENGTH_SHORT`. Left
+  alone because `fastForward` also suppresses every message, so it cannot be seen in
+  that case -- but it is the same expression novice mode now runs the other side of,
+  so it is written down rather than left as folklore.
 - ~~`Main.onResume()` compares preference strings with `==` rather than `.equals()`. It happens to work because the default is a string literal.~~ **Fixed as a side effect of the 1.4.5 Kotlin conversion.** The Java's `==` was reference comparison that only worked because the preference default is an interned `""`; Kotlin's `==` is a value comparison and agrees with what the Java did on every value this can hold. Not fixed on purpose — worth knowing so nobody re-adds a `.equals()` to "fix" it again.
 - **`Game.java.new` is a stale editor backup** that is still tracked in git. It does
   not compile (it is not a `.java` file) and should be deleted.
@@ -647,14 +651,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.12, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.13, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
 minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
 than typed next to it, so the two cannot drift apart: the encoding is
 `major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
-no `versionCode` has ever had to change retroactively. 1.4.12 is 1004012.
+no `versionCode` has ever had to change retroactively. 1.4.13 is 1004013.
 
 The one hard constraint is that `versionCode` must strictly increase on every release.
 Android refuses to install a build whose code is not greater than the installed one,

@@ -520,3 +520,55 @@ Version 1.4.12               2026-10-02
    for anyone testing a build from main rather than a theoretical tidiness
    concern. Leaving main to drift at a published versionCode defers that to
    whoever remembers
+
+
+Version 1.4.13               unreleased
+
+ - novice mode: pause after each play and wait for a tap instead of a timed
+   delay, so a beginner can follow the game rather than race it. Off by default,
+   beside game_speed in the settings. Fixes #5, the last open item of the
+   Java-to-Kotlin migration's stage 7
+
+ - it is a checkbox rather than another value on game_speed. game_speed is a
+   number of milliseconds and two readers want exactly that -- waitABit, and
+   GameTable's toast duration -- so a "tap to advance" value would have to be
+   special-cased in both and the toast would get a made-up duration out of it.
+   The choice between the two kinds of pause is the checkbox
+
+ - the branch is in waitABit, not at each call site. The timed pause reaches
+   play from everywhere: every promptUser that waits, and four deliberate
+   think-pauses in ComputerPlayer. One branch means all of them follow,
+   including the pauses between two computer players, which is what following
+   the game actually means
+
+ - Very fast still wins. getDelay() of 0 returns before the tap wait, so the
+   one setting whose purpose is not to wait is not turned into a setting that
+   does. That ordering is a test
+
+ - the tap does not go through drawPileTapped, and must not. That method clears
+   the round-start wait and then, if the player is human, calls
+   turnDecisionDrawCard -- so reusing it would hand the player a draw decision
+   they never made, on a turn that has not started. There is a separate
+   Game.tableTapped with no side effect beyond the wait, called from
+   GameTable.onTouchEvent before the pile and hand handling so the same touch
+   can do both things
+
+ - a wait that can wait for ever is a shutdown hazard, and this one could. It is
+   a spin of Thread.sleep(100) on the game thread, so backgrounding the app
+   mid-pause would leave it sitting there. Two exits, both tested by releasing a
+   wait that is provably already blocked: pause() clears the flag, which is the
+   ordinary case, and the loop checks m_stopping, which covers the rest.
+   Resuming does not demand a tap for a pause the player never saw the end of
+
+ - new NoviceModeTest, 11 tests. The waits run on a background thread, because
+   blocking is the behaviour, and each one waits for waitingToAdvance() before
+   asserting it is still blocked, so no test can pass by the wait never having
+   started. Disabling the waitABit branch fails 5 of the 11
+
+ - one test was wrong on the first pass and the correction is the useful part:
+   it asserted that a draw-pile tap releases a novice wait, which it does not --
+   the app calls tableTapped first and then the pile handling. Split into what
+   actually holds: a draw-pile tap alone does not release it, and the two calls
+   in the order onTouchEvent makes them both release and decide the draw
+
+ - test count is 182 unit plus 9 instrumented

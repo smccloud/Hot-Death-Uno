@@ -30,6 +30,10 @@ class Game private constructor() : Thread()
 
 	private var m_roundComplete = true
 	private var m_waitingToStartRound = false
+
+	// Novice mode: set while waitABit is blocked on a tap instead of a
+	// delay. Deliberately not m_waitingToStartRound -- see tableTapped().
+	private var m_waitingToAdvance = false
 	private var m_gameOver = false
 	private var m_winner = 0
 
@@ -377,12 +381,23 @@ class Game private constructor() : Thread()
 		}
 	}
 
+	/**
+	 * Clear a novice-mode tap wait, so backgrounding the app mid-pause releases
+	 * the game thread rather than leaving it in the wait.
+	 *
+	 * Pausing is the common case and shutdown() is the other one, so both have to
+	 * let the loop go. Paused is the right time for it: the player has left, the
+	 * table is not being watched, and there is no tap coming. On resume the game
+	 * carries on rather than demanding a tap for a pause nobody saw the end of.
+	 */
 	fun pause ()
 	{
 		synchronized (m_pauseLock)
 		{
 			m_paused = true
 		}
+
+		m_waitingToAdvance = false
 	}
 
 	fun unpause ()
@@ -1322,6 +1337,36 @@ class Game private constructor() : Thread()
 		}
 	}
 
+	/**
+	 * Any tap on the table, called before the piles sort out what was hit.
+	 *
+	 * This is deliberately not `m_waitingToStartRound`, and it must not be folded
+	 * into `drawPileTapped` either. That method clears the round-start wait and
+	 * then, if the current player is human, calls `turnDecisionDrawCard` -- so
+	 * reusing it for a novice-mode tap would hand the player a draw decision they
+	 * never made, on a turn that has not started yet. `HumanPlayer.startTurn`
+	 * resets that flag, so the decision would be discarded, but only by luck: the
+	 * tap would mean two things at once and one of them would win by accident.
+	 *
+	 * Separate, and with no side effect beyond the wait, is the whole point.
+	 */
+	fun tableTapped ()
+	{
+		m_waitingToAdvance = false;
+	}
+
+	/**
+	 * True while a novice-mode pause is waiting for a tap.
+	 *
+	 * Exists so a test can tell "the wait released because the table was tapped"
+	 * from "the wait released because the game was paused", which look identical
+	 * from the game thread.
+	 */
+	fun waitingToAdvance (): Boolean
+	{
+		return m_waitingToAdvance;
+	}
+
 	fun drawPileTapped ()
 	{
 		if (m_waitingToStartRound)
@@ -2189,12 +2234,53 @@ class Game private constructor() : Thread()
 		}
 	}
 
+	/**
+	 * Pause the way the game is set up to pause: for a fixed delay normally, or
+	 * until the table is tapped in novice mode.
+	 *
+	 * This is the branch point rather than each call site, because the timed pause
+	 * reaches play from everywhere -- every promptUser that waits, and four
+	 * deliberate think-pauses in ComputerPlayer -- and novice mode is a choice
+	 * between the two kinds of pause, not a third thing. Changing it here means
+	 * every one of those sites follows, including the ones that pause between two
+	 * computer players, which is what a beginner following the game wants.
+	 *
+	 * `m_stopping` is checked every pass, and that is the point of the loop rather
+	 * than a nicety. This is a spin of Thread.sleep(100) on the game thread, and
+	 * an unbounded one is a shutdown hazard: background the app mid-pause and the
+	 * game thread sits here forever. pause() clears the flag for the ordinary
+	 * case, and m_stopping covers the rest.
+	 *
+	 * Zero delay still returns early, before the tap wait. Very fast is a speed
+	 * choice and novice mode is a pacing choice; asking for both means asking for
+	 * the faster one, which is what a return there preserves.
+	 */
 	fun waitABit()
 	{
 		val delay = this.getDelay();
 
 		if (delay == 0)
 		{
+			return;
+		}
+
+		if (m_go!!.getNoviceMode())
+		{
+			promptUser (getString (R.string.msg_tap_to_continue), false);
+
+			m_waitingToAdvance = true;
+			while (m_waitingToAdvance && !m_stopping)
+			{
+				try
+				{
+					Thread.sleep(100);
+				}
+				catch (e: InterruptedException)
+				{
+				}
+			}
+			m_waitingToAdvance = false;
+
 			return;
 		}
 

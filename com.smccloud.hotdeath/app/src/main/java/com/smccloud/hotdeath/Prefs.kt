@@ -139,6 +139,8 @@ class Prefs : PreferenceActivity(), OnSharedPreferenceChangeListener
 	{
 		private const val OPT_GAME_SPEED = "game_speed"
 		private const val OPT_GAME_SPEED_DEF = "1"
+		private const val OPT_NOVICE_MODE = "novice_mode"
+		private const val OPT_NOVICE_MODE_DEF = false
 		private const val OPT_TWO_DECKS = "two_decks"
 		private const val OPT_TWO_DECKS_DEF = false
 		private const val OPT_COMPUTER_4TH = "computer_4th"
@@ -182,6 +184,21 @@ class Prefs : PreferenceActivity(), OnSharedPreferenceChangeListener
 		{
 			return PreferenceManager.getDefaultSharedPreferences(context)
 						.getBoolean (OPT_COMPUTER_4TH, OPT_COMPUTER_4TH_DEF);
+		}
+
+		/**
+		 * Novice mode: pause for a tap instead of a timed delay.
+		 *
+		 * A separate key rather than another value on game_speed, because
+		 * game_speed is a number of milliseconds and two of its readers -- waitABit
+		 * and GameTable's toast duration -- want exactly that. A "tap to advance"
+		 * value has no duration to give, so it would have to be special-cased in
+		 * both, and the toast would get a made-up duration out of it.
+		 */
+		fun getNoviceMode (context: Context?): Boolean
+		{
+			return PreferenceManager.getDefaultSharedPreferences(context)
+						.getBoolean (OPT_NOVICE_MODE, OPT_NOVICE_MODE_DEF);
 		}
 
 		fun getFaceUp (context: Context?): Boolean

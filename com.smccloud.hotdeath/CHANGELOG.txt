@@ -212,7 +212,7 @@ Version 1.4.6                2026-10-01
    instrumented
      
 
-Version 1.4.7                unreleased
+Version 1.4.7                2026-10-01
 
  - the test suite is Kotlin, which finishes the 1.4.5 migration: there is no
    Java source left anywhere in the repository. The 11 test files moved from

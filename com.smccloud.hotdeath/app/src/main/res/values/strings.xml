@@ -192,7 +192,7 @@
 	<string name="two_decks_summary">Use two decks instead of one</string>
 
 	<string name="computer_4th_title">Computer 4th</string>
-	<string name="computer_4th_summary">Have a computer play the 4th (south) seat; mostly useful for testing</string>
+	<string name="computer_4th_summary">Have a computer play the 4th (south) seat at the North player\'s difficulty; mostly useful for testing, since it leaves no human in the game</string>
 
 	<string name="face_up_title">Face up</string>
 	<string name="face_up_summary">Play with cards face up; useful for learning the game or for testing</string>

@@ -444,3 +444,47 @@ Version 1.4.10               2026-10-02
    card-not-in-hand path and the flags the round loop reads are pinned alongside
 
  - test count is 167 unit plus 9 instrumented
+
+
+Version 1.4.11               unreleased
+
+ - the 4th computer seat reads North's difficulty on purpose, and now says so
+   where it matters. ComputerPlayer's else branch fell through to p2 under a
+   comment that described a testing affordance "if we are testing", which reads as
+   an accident to whoever finds it next; issue #7 asked whether it was deliberate
+   and, if so, for a comment that claimed it. It is deliberate. Fixes #7
+
+ - why there is no fourth pair, since that is the part the old comment did not
+   say: the settings screen has three difficulty pairs under categories titled
+   West, North and East because those are the three seats a computer holds in a
+   normal game. South is the human's. The else branch is South -- the seat the
+   human would occupy -- playing when computer_4th replaces them. A fourth pair
+   would mean two more keys in Prefs, a fourth category in preferences.xml, and
+   four difficulty controls on the main settings screen for a mode that leaves no
+   human in the game at all. A game with four computers is a simulation, and
+   difficulty knobs for a simulation are not a setting anybody asked for
+
+ - the preference summary said nothing about which seat the 4th computer is or
+   what it plays at, so somebody who turned the option on had three difficulty
+   sections and no way to know the fourth seat was reading one of them. It now
+   says the South seat plays at the North player's difficulty, and that the
+   option leaves no human in the game. The README's settings table says the same
+
+ - the else is left as an else rather than an explicit SEAT_SOUTH test. A seat of
+   0 would land there too, and refusing to set anything would leave the class
+   defaults instead, which is a different behaviour to reason about in a path
+   that cannot currently be reached: Game's constructors call setSeat on all four
+   seats before any of them plays. Worth knowing if that ever changes
+
+ - new ComputerDifficultyTest, 4 tests. Each preference pair is given a distinct
+   skill and aggression (0/-6, 1/0, 2/6, all from the ranges in arrays.xml) so a
+   seat reading the wrong pair fails on both halves rather than passing because
+   two settings happened to agree, and so a reordered comparison in the if-chain
+   shows up as a copy of the wrong pair while every other test still passed.
+   southReadsNorths is the one that fails if a fourth pair is ever added, which
+   is the point: that should be a deliberate act with preferences.xml behind it,
+   not something to arrive at by editing an else
+
+ - no behaviour changed. Same three pairs, same seats, same fall-through
+
+ - test count is 171 unit plus 9 instrumented

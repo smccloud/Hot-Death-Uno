@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.10 (`versionCode` 1004010) |
+| Current version | 1.4.11 (`versionCode` 1004011), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -211,12 +211,12 @@ Defined in `res/xml/preferences.xml` and read through `GameOptions`.
 |---|---|---|---|
 | Game speed | `game_speed` | `1` (Fast) | 0 Very fast … 4 Very slow |
 | Two decks | `two_decks` | `false` | 108-card or 216-card deck |
-| Computer 4th | `computer_4th` | `false` | Let the AI take the South seat (for testing) |
+| Computer 4th | `computer_4th` | `false` | Let the AI take the South seat at the *North* player's difficulty (for testing — it leaves no human in the game) |
 | Face up | `face_up` | `false` | Reveal all cards — useful for learning |
 | Cheat level | `cheat_level` | `0` (Honest) | 0 Honest, 1 Rascal, 2 Scoundrel, 3 Dirtbag |
 | Cheat code(s) | `cheat_code` | `""` | Comma-separated; see below |
-| Skill (per computer seat) | `p{1,2,3}_skill` | `1` | 0 Weak, 1 Strong, 2 Expert |
-| Aggression (per computer seat) | `p{1,2,3}_aggression` | `0` | -6 Pushover, -3 Nice guy, 0 Normal, 3 Jerk, 6 Sadist |
+| Skill (per computer seat) | `p{1,2,3}_skill` | `1` | 0 Weak, 1 Strong, 2 Expert — West, North, East; there is no fourth pair, and `computer_4th` uses North's |
+| Aggression (per computer seat) | `p{1,2,3}_aggression` | `0` | -6 Pushover, -3 Nice guy, 0 Normal, 3 Jerk, 6 Sadist — same three seats |
 | Saved game | `gamestate` | `""` | Written by `GameActivity.onPause()`, not user-editable |
 
 ### AI behavior
@@ -349,7 +349,7 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004010
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004011
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/
             ├── main/
@@ -620,14 +620,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.10, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.11, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
 minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
 than typed next to it, so the two cannot drift apart: the encoding is
 `major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
-no `versionCode` has ever had to change retroactively. 1.4.10 is 1004010.
+no `versionCode` has ever had to change retroactively. 1.4.11 is 1004011.
 
 The one hard constraint is that `versionCode` must strictly increase on every release.
 Android refuses to install a build whose code is not greater than the installed one,

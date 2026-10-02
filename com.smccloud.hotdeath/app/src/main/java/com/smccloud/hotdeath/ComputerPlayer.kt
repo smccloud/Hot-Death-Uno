@@ -96,6 +96,37 @@ open class ComputerPlayer : Player
 		return m_chosenColor
 	}
 
+	/**
+	 * Take this seat's difficulty from the preferences.
+	 *
+	 * There are three pairs of settings for three opponents, and the settings
+	 * screen says so: the categories are titled West, North and East, because
+	 * those are the three seats a computer holds in a normal game. South is the
+	 * human's.
+	 *
+	 * So the `else` below is not a fourth setting that ran out -- it is South,
+	 * the seat the human would otherwise occupy, playing when `computer_4th` has
+	 * replaced them. It takes North's pair. That is a choice, and it was the
+	 * cheaper of the two available ones: a fourth pair would mean a fourth pair
+	 * of keys in Prefs, a fourth category in preferences.xml, and four
+	 * difficulty controls on the main settings screen for a mode that leaves no
+	 * human in the game at all. A game with four computers is a simulation, and
+	 * difficulty knobs for a simulation are not a setting anybody asked for.
+	 *
+	 * `computer_4th` is off by default and its summary calls it "mostly useful
+	 * for testing", so this is a testing affordance that is reachable rather than
+	 * one that is hidden.
+	 *
+	 * The summary string says the fourth seat plays at North's difficulty, so
+	 * somebody who turns the option on is not left guessing which of the three
+	 * sections it belongs to.
+	 *
+	 * `else` rather than an explicit `SEAT_SOUTH` test on purpose: a seat of 0
+	 * would also land here, and refusing to set anything would leave the class
+	 * defaults, which is a different behaviour to reason about in a path that
+	 * cannot currently be reached. Game's constructors call setSeat on all four
+	 * seats before any of them plays.
+	 */
 	fun readAggressionAndSkill()
 	{
 		if (m_seat == Game.SEAT_WEST)
@@ -113,8 +144,6 @@ open class ComputerPlayer : Player
 			m_aggression = m_go!!.getP3Agg()
 			m_skill = m_go!!.getP3Skill()
 		}
-		// this is only here so that we can have a 4th computer player
-		// if we are testing.
 		else
 		{
 			m_aggression = m_go!!.getP2Agg()

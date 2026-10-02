@@ -522,7 +522,7 @@ Version 1.4.12               2026-10-02
    whoever remembers
 
 
-Version 1.4.13               unreleased
+Version 1.4.13               2026-10-02
 
  - novice mode: pause after each play and wait for a tap instead of a timed
    delay, so a beginner can follow the game rather than race it. Off by default,

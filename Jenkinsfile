@@ -654,10 +654,19 @@ node {
           # is installed here. As of 2026-10-02 sdkmanager still publishes
           # android-37.0;google_apis revision 6 and android-37.2;google_apis_ps16k
           # revision 5, which are exactly the two revisions installed under
-          # $SDK/system-images and the two that were tested. No newer image exists,
-          # so restoring the entry now would only repeat the failure. Re-run the
-          # comparison rather than trusting this comment to still be true.
+          # \$SDK/system-images and the two that were tested. No newer image
+          # exists, so restoring the entry now would only repeat the failure.
+          # Re-run the comparison rather than trusting this comment to still
+          # be true.
           #
+          # The backslash before the SDK reference above is not decoration.
+          # Groovy interpolates a dollar inside this block whether or not it sits
+          # in a shell comment, and the SDK variable is one the script defines for
+          # itself rather than one the pipeline binds -- so leaving it unescaped
+          # fails the whole stage with "No such property: SDK" before a single
+          # command runs. It is written here with no dollar at all for the same
+          # reason.
+
           # Untested, and not worth a build each on current evidence: 37.1's
           # google_apis_ps16k (revision 9), and 37.0's google_apis_playstore and
           # google_apis_playstore_ps16k. 37.0 and 37.2 already failed two

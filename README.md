@@ -45,22 +45,53 @@ networked play.
 | | |
 |---|---|
 | ![The main menu](docs/screenshots/01-main.png) | ![A hand in play](docs/screenshots/02-table.png) |
-| **Main** — New Game, Continue, Settings, Help, About, Exit | **In play** — your hand along the bottom, the opponents' hidden hands around the table, and the turn arrow on the discard pile |
+| **Main** — New Game, Settings, Help, About, Exit | **In play** — your hand along the bottom, the opponents' hidden hands around the table, and the turn arrow on the discard pile |
 | ![The card catalog](docs/screenshots/03-card-catalog.png) | ![The card rules dialog](docs/screenshots/04-card-help.png) |
 | **Card catalog** — every card in the deck, from *Card Info* on the options menu | **Card rules** — tap any card in the catalog for its full rules text |
 
 These are not mock-ups or hand-assembled composites. They are screenshots of the
 release APK, taken on an emulator by the `Screenshots` stage in the `Jenkinsfile`,
-and they are reproducible: `./jenkins.ps1 build -NoTests -Screenshots` boots an
-API 35 emulator, drives the app through `uiautomator` by resource ID rather than by
-tapping fixed coordinates, and archives the results alongside the APK. The stage is
-off by default because it costs a whole extra emulator boot and nothing in the
-build depends on it.
+and they are reproducible: the stage boots an API 35 emulator, drives the app
+through `uiautomator` by resource ID rather than by tapping fixed coordinates, and
+archives the results alongside the APK. It is off by default because it costs a
+whole extra emulator boot and nothing in the build depends on it.
+
+    # Windows, via the PowerShell client
+    ./jenkins.ps1 build -NoTests -Screenshots
+
+    # anywhere else, including a Linux checkout. jenkins.sh has no --screenshots
+    # flag, so post the parameter by hand. The creds file is read with grep and
+    # cut rather than sourced, for the reason jenkins.sh's load_creds gives: a
+    # credentials file that gets executed rather than read is a code-execution
+    # hazard the moment it is ever copied or synced somewhere.
+    URL=https://jenkins.smccloud.com
+    U=$(grep '^JENKINS_USER='  jenkins-creds | cut -d= -f2-)
+    T=$(grep '^JENKINS_TOKEN=' jenkins-creds | cut -d= -f2-)
+    CRUMB=$(curl -s -u "$U:$T" "$URL/crumbIssuer/api/json" \
+            | grep -o '"crumb":"[^"]*"' | cut -d'"' -f4 | sed 's/^/Jenkins-Crumb:/')
+    curl -X POST -u "$U:$T" -H "$CRUMB" \
+      "$URL/job/Hot-Death-Uno/buildWithParameters" \
+      -d RUN_TESTS=false -d SCREENSHOTS=true
+
+The PNGs come out of the build's artifacts, in `com.smccloud.hotdeath/app/build/
+screenshots/`. This set was scaled and quantised with `sharp`; anything that does
+the same two things will do.
 
 The committed images are the same PNGs at 720×1280 and quantised to 256 colours,
-which takes them from 6.2 MB to 1.4 MB with no visible difference — this is flat
-pixel art, so the reduction is free. The originals are 1080×1920 in the build
-artifacts.
+which takes them from 6.0 MB to 1.2 MB with no visible difference — this is flat
+pixel art over a dithered felt background, so the palette costs nothing and the
+resize does most of the work. The originals are 1080×1920 in the build artifacts,
+even though the stage asks for a 1080×2160 display: the device clamps the override
+to 1920, which is why the committed images are 9:16 and why the stage's comment
+should not be taken as describing what comes out.
+
+The current set is build #115 of version 1.4.11. Nothing between 1.4.7 and 1.4.11
+changed what any of these four screens looks like — the releases in that range
+changed messages, card label spacing and a crash path, none of which appears in a
+still — so they were regenerated for currency rather than because any of them was
+out of date. The main menu in particular is identical apart from the clock, and
+Continue is *absent* from it: the emulator is wiped, so there is no saved game and
+the button is hidden.
 
 ---
 

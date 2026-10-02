@@ -342,7 +342,7 @@ Version 1.4.8                2026-10-02
  - test count is 153 unit plus 9 instrumented
 
 
-Version 1.4.9                unreleased
+Version 1.4.9                2026-10-02
 
  - penalty messages now name the player who has to act, not the one who threw the
    card. They read "North threw a Draw Four - 4 to South...", which asks a player

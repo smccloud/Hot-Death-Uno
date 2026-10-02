@@ -490,7 +490,7 @@ Version 1.4.11               2026-10-02
  - test count is 171 unit plus 9 instrumented
 
 
-Version 1.4.12               unreleased
+Version 1.4.12               2026-10-02
 
  - jenkins.sh takes --screenshots and --no-screenshots, so the local client can
    ask for the README screenshots on a Linux checkout the way jenkins.ps1

@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Hot Death Uno - local Jenkins client
 #
-# Companion to the tracked Jenkinsfile. Stays untracked for the same reason the
-# old /jenkins.ps1 did: it is a personal client holding a controller URL, not
-# part of the project's build.
+# Companion to the Jenkinsfile. Both this and jenkins.ps1 used to be untracked,
+# on the grounds that a client holding a controller URL is not part of the
+# project's build; neither is any more, and both have been committed for some
+# time. What is untracked is the credentials -- jenkins-creds and jenkins-creds.xml
+# are in .gitignore, and that is the part that matters.
 #
-# The job declares one parameter, RUN_TESTS: off means build and sign only, with
-# no unit tests, no lint and no emulator matrix. --tests/--no-tests set it; with
-# neither, the job's own default applies. This posts to buildWithParameters
+# The job declares two parameters. RUN_TESTS: off means build and sign only,
+# with no unit tests, no lint and no emulator matrix. SCREENSHOTS: on adds a
+# stage that boots an emulator and captures the README images from the release
+# APK. --tests/--no-tests and --screenshots/--no-screenshots set them; with
+# neither, the job's own defaults apply. This posts to buildWithParameters
 # rather than /build, because a parameterized job rejects a bare POST to /build
 # with "HTTP 400 Nothing is submitted".
 #
@@ -86,6 +90,12 @@ options:
       --timeout N   seconds to wait for completion (default ${DEFAULT_TIMEOUT})
       --tests       run unit tests, lint and the API 34-36 emulator matrix
       --no-tests    build and sign only: skip every test stage
+                    (default: whatever the job is configured to do)
+      --screenshots
+                    boot an emulator and capture the four README screenshots
+                    from the release APK
+      --no-screenshots
+                    skip that stage
                     (default: whatever the job is configured to do)
   -h, --help        this text
 EOF
@@ -366,6 +376,7 @@ cmd_build() {
 
 main() {
   local force=0 watch=1 timeout=$DEFAULT_TIMEOUT cmd=build tests=auto
+  local screenshots=auto
   local -a params=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -374,6 +385,8 @@ main() {
       --force) force=1; shift ;;
       --tests) tests=yes; shift ;;
       --no-tests) tests=no; shift ;;
+      --screenshots) screenshots=yes; shift ;;
+      --no-screenshots) screenshots=no; shift ;;
       --timeout) [ $# -ge 2 ] || die "--timeout needs a value" $EX_USAGE
                  timeout=$2; shift 2 ;;
       --timeout=*) timeout=${1#*=}; shift ;;
@@ -384,10 +397,21 @@ main() {
 
   load_creds
 
-  # Only sent when asked for, so the default really is the job's own.
+  # Only sent when asked for, so the default really is the job's own. Order
+  # matches the job's parameterDefinitions, which is not a requirement but
+  # makes a queue in the UI read in the order the job declares them.
+  #
+  # Tri-state for both, as RUN_TESTS was. jenkins.ps1 only has -Screenshots with
+  # no -NoScreenshots, which is enough there because the job's own default is
+  # false; this side sends an explicit false as well, so a build can turn the
+  # stage off on a controller whose default has been changed.
   case "$tests" in
-    yes) params=("RUN_TESTS=true") ;;
-    no)  params=("RUN_TESTS=false") ;;
+    yes) params+=("RUN_TESTS=true") ;;
+    no)  params+=("RUN_TESTS=false") ;;
+  esac
+  case "$screenshots" in
+    yes) params+=("SCREENSHOTS=true") ;;
+    no)  params+=("SCREENSHOTS=false") ;;
   esac
 
   # Precedence, lowest last: env, then the creds file, then these.

@@ -488,3 +488,35 @@ Version 1.4.11               2026-10-02
  - no behaviour changed. Same three pairs, same seats, same fall-through
 
  - test count is 171 unit plus 9 instrumented
+
+
+Version 1.4.12               unreleased
+
+ - jenkins.sh takes --screenshots and --no-screenshots, so the local client can
+   ask for the README screenshots on a Linux checkout the way jenkins.ps1
+   already could on Windows. The README documented only the PowerShell flag,
+   which meant the documented way to regenerate the images was not runnable here;
+   that section now gives both, and the curl-and-crumb workaround it carried in
+   between has gone
+
+ - both flags are tri-state, like --tests/--no-tests: sent only when asked for,
+   so the job's own default really is the default and a controller that has
+   changed its default can still be overridden in both directions. jenkins.ps1
+   has -Screenshots with no -NoScreenshots, which is enough there because the
+   job's own default is false; this side sends an explicit false too
+
+ - jenkins.sh's own header said it "stays untracked", which it stopped doing a
+   long time ago, as had jenkins.ps1. Left in place it would read as a reason not
+   to commit changes to the file, which is the opposite of what is true. Corrected
+   to say what is untracked, which is the credentials
+
+ - no application code changed and no build behaviour changed. Test count is
+   unchanged at 171 unit plus 9 instrumented
+
+ - the version is bumped even so, and this reverses the choice made for issue #8,
+   where a Jenkinsfile-only change was left at the previous versionCode. Bumping
+   is better: a release APK built from main at a versionCode that is already
+   published will not install over the published app, which is a real annoyance
+   for anyone testing a build from main rather than a theoretical tidiness
+   concern. Leaving main to drift at a published versionCode defers that to
+   whoever remembers

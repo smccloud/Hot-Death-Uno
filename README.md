@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.11 (`versionCode` 1004011) |
+| Current version | 1.4.12 (`versionCode` 1004012), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -56,22 +56,18 @@ through `uiautomator` by resource ID rather than by tapping fixed coordinates, a
 archives the results alongside the APK. It is off by default because it costs a
 whole extra emulator boot and nothing in the build depends on it.
 
-    # Windows, via the PowerShell client
+    # Linux and macOS; add -n to queue and walk away instead of watching
+    ./jenkins.sh build --no-tests --screenshots
+
+    # Windows
     ./jenkins.ps1 build -NoTests -Screenshots
 
-    # anywhere else, including a Linux checkout. jenkins.sh has no --screenshots
-    # flag, so post the parameter by hand. The creds file is read with grep and
-    # cut rather than sourced, for the reason jenkins.sh's load_creds gives: a
-    # credentials file that gets executed rather than read is a code-execution
-    # hazard the moment it is ever copied or synced somewhere.
-    URL=https://jenkins.smccloud.com
-    U=$(grep '^JENKINS_USER='  jenkins-creds | cut -d= -f2-)
-    T=$(grep '^JENKINS_TOKEN=' jenkins-creds | cut -d= -f2-)
-    CRUMB=$(curl -s -u "$U:$T" "$URL/crumbIssuer/api/json" \
-            | grep -o '"crumb":"[^"]*"' | cut -d'"' -f4 | sed 's/^/Jenkins-Crumb:/')
-    curl -X POST -u "$U:$T" -H "$CRUMB" \
-      "$URL/job/Hot-Death-Uno/buildWithParameters" \
-      -d RUN_TESTS=false -d SCREENSHOTS=true
+Both clients read their credentials from `./jenkins-creds` (or the environment),
+and neither sources that file: `jenkins.sh` parses it, because a credentials file
+that gets executed rather than read is a code-execution hazard the moment it is
+ever copied or synced somewhere. With neither `--screenshots` nor
+`--no-screenshots`, the parameter is not sent at all and the job's own default
+applies.
 
 The PNGs come out of the build's artifacts, in `com.smccloud.hotdeath/app/build/
 screenshots/`. This set was scaled and quantised with `sharp`; anything that does
@@ -380,7 +376,7 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004011
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004012
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/
             ├── main/
@@ -651,14 +647,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.11, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.12, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
 minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
 than typed next to it, so the two cannot drift apart: the encoding is
 `major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
-no `versionCode` has ever had to change retroactively. 1.4.11 is 1004011.
+no `versionCode` has ever had to change retroactively. 1.4.12 is 1004012.
 
 The one hard constraint is that `versionCode` must strictly increase on every release.
 Android refuses to install a build whose code is not greater than the installed one,

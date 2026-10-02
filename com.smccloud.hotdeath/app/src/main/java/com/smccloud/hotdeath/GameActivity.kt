@@ -2,6 +2,7 @@ package com.smccloud.hotdeath
 
 import android.app.Activity
 import org.json.*
+import android.util.Log
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.app.Dialog
@@ -100,7 +101,20 @@ class GameActivity : Activity()
 			}
 			catch (e: JSONException)
 			{
-				// FIXME: not sure what to do here if we couldn't load the object from JSON
+				// Two malformed saves end up here and they are not the same failure.
+				// A string that is not JSON at all fails on the line above, in
+				// JSONObject(s). A well-formed object that is missing a key gets
+				// past that and fails inside Game's resuming constructor, which
+				// rethrows rather than returning a half-built game -- see Game.kt.
+				// Either way m_game is left null and the block below starts a new
+				// game, so the player is never handed a Game that will crash on the
+				// first card played.
+				//
+				// Logged rather than swallowed: the exception names the key that was
+				// missing, which is the one thing a bug report needs and the one
+				// thing the player cannot see. A discarded save is silent data loss
+				// otherwise.
+				Log.e("HDU", "Could not resume the saved game state: " + e.message, e)
 			}
 		}
 

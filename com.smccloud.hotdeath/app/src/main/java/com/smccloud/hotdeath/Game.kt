@@ -56,12 +56,15 @@ class Game private constructor() : Thread()
 
 	private var m_fastForward = false
 
-	// Null in the plain constructor until startRound() builds one, and left null
-	// by the resuming constructor when the saved game is malformed -- the empty
-	// catch (JSONException) below. Every dereference in this file is therefore
-	// `m_penalty!!`, which keeps the NullPointerException the Java threw in
-	// exactly those two cases rather than quietly papering over them with a
-	// default. See issue #2.
+	// Null only in the plain constructor, until startRound() builds one. The
+	// resuming constructor either sets it or rethrows, so a half-built Game is
+	// not reachable -- see the catch at the end of that constructor.
+	//
+	// Every dereference in this file is therefore `m_penalty!!`, which keeps the
+	// NullPointerException the Java threw on a game that has not been reset yet
+	// rather than quietly papering over it with a default. That case is the
+	// plain constructor's alone now; it used to include the malformed-save case
+	// as well, which is what issue #2 was about.
 	private var m_penalty: Penalty? = null
 
 	private var m_lastCardCheckedIsDefender = false
@@ -296,8 +299,19 @@ class Game private constructor() : Thread()
 		}
 		catch (e: JSONException)
 		{
-			// FIXME: not sure what to do here if we couldn't load the object from JSON
-
+			// Rethrown rather than swallowed. Returning from here hands back a Game
+			// that stopped part-way through the parse: m_penalty and m_currCard are
+			// still null, so the first checkCard throws a NullPointerException off
+			// one of the `m_penalty!!` sites some way into play, with nothing in the
+			// stack trace pointing at the save file. GameActivity catches this and
+			// falls back to a new game, which is what its own comment there already
+			// says happens when the JSON will not parse -- that fallback was dead
+			// code for as long as this catch pretended the resume had worked.
+			//
+			// org.json names the key it could not find in the message, so this line
+			// is the only place that says *which* field of the save is wrong.
+			Log.e("HDU", "Could not resume the saved game: " + e.message, e)
+			throw e
 		}
 	}
 

@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.7 (`versionCode` 1004007) |
+| Current version | 1.4.8 (`versionCode` 1004008), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -349,7 +349,7 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004007
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004008
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/
             ├── main/
@@ -540,13 +540,15 @@ Three behavioral changes came with the retarget:
   `ArrayIndexOutOfBoundsException` or build an empty deck.
 - **`gradle-wrapper.jar` is still not committed** — `gradlew` will not run until you
   generate it. See [Building](#building).
-- **Snapshot corruption is swallowed.** Both the `Game(JSONObject, ...)` constructor and
-  `GameActivity` wrap deserialization in `catch (JSONException e)` with a `FIXME` and
-  no recovery, so a corrupt `gamestate` silently starts a fresh game. Filed as
-  [#2](https://github.com/smccloud/Hot-Death-Uno/issues/2), which takes the sharper
-  line: a partially-parsed save leaves `Game` half-built and the first `checkCard`
-  dereferences a null `m_penalty`, so it crashes on the first card played rather than
-  starting fresh.
+- ~~**Snapshot corruption is swallowed.** Both the `Game(JSONObject, ...)` constructor and
+  `GameActivity` wrapped deserialization in `catch (JSONException e)` with a `FIXME` and
+  no recovery, so a corrupt `gamestate` left `Game` half-built: the first `checkCard`
+  dereferenced a null `m_penalty` and crashed on the first card played, with nothing in
+  the stack trace pointing at the save file.~~ **Fixed in 1.4.8.** Both catches now log
+  and rethrow, and `GameActivity`'s existing `if (m_game == null)` fallback — which was
+  dead code for as long as the constructor swallowed the exception — starts a new game.
+  `org.json` names the missing key, so the log line says which field of the save is
+  wrong. See [#2](https://github.com/smccloud/Hot-Death-Uno/issues/2).
 - **Toast durations can go negative.** `GameTable` computes the duration as
   `getDelay() - 500`, which is negative both during fast-forward (`0`) and while the
   human seat is inactive (`250`).
@@ -619,14 +621,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.7, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.8, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
 minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
 than typed next to it, so the two cannot drift apart: the encoding is
 `major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
-no `versionCode` has ever had to change retroactively. 1.4.7 is 1004007.
+no `versionCode` has ever had to change retroactively. 1.4.8 is 1004008.
 
 The one hard constraint is that `versionCode` must strictly increase on every release.
 Android refuses to install a build whose code is not greater than the installed one,

@@ -275,3 +275,46 @@ Version 1.4.7                2026-10-01
    theAidsCardInfectsOnlyOnTheFinalScore, both pass and both stay passing: the
    bug was never on that side
       
+
+
+Version 1.4.8                unreleased
+
+ - a malformed save is now rejected at the point it is read, rather than
+   crashing some way into play. Game's resuming constructor caught JSONException
+   and did nothing with it, so a well-formed JSON object missing any one key
+   returned a Game that had stopped part-way through the parse: m_penalty and
+   m_currCard were still null, and the crash came later, on the first card
+   played, off one of the 68 m_penalty!! sites in Game.kt. Nothing in the stack
+   trace pointed at the save file, because by then the save file was not in it.
+   The catch logs and rethrows, so GameActivity's existing "if (m_game == null)"
+   fallback starts a new game -- which is what the comment there already claimed
+   happened, and which was dead code for as long as the catch swallowed the
+   exception. Fixes issue #2
+
+ - the log line is the point as much as the throw is. org.json names the key it
+   could not find, so "Could not resume the saved game: No value for penalty" is
+   the difference between a discarded save that is a mystery and one a bug
+   report can be made from. The player still gets a new game either way; a
+   discarded save is otherwise silent data loss
+
+ - the m_penalty comment above the field said the resuming constructor left it
+   null on a malformed save and pointed at issue #2. It now says what is true,
+   which is that the plain constructor is the only path that leaves it null, and
+   that is the NullPointerException the Java threw before startRound()
+
+ - new MalformedSaveTest, 6 tests. It removes each of the 6 top-level keys, each
+   of the 7 inside "state" and each of the 6 inside a player, and asserts every
+   one is rejected -- the empty catch treated all of them identically, so testing
+   one would not have covered the rest. Two of the cases are worth their own
+   test: a save with no "players" key fails before anything is built, while a
+   player missing "totalScore" fails only after the deck, both piles and all
+   four seats have been constructed with wires running back to this Game, so it
+   got the furthest before throwing
+
+ - the good path is pinned too. aCompleteSaveStillResumes builds a save the app
+   could have written -- a deck, a two-card draw pile, four hands of two cards
+   each -- and asserts the cards came back, the dealer and current player exist,
+   and seat 0's right-hand opponent is seat 1. Without it a fix that rejected
+   every save would pass the other five tests
+
+ - test count is 148 unit plus 9 instrumented

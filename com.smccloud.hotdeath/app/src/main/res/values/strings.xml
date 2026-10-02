@@ -113,6 +113,8 @@
 	     wording says "stacked by" rather than "from". The player who threw the
 	     first card is not recoverable once a second card lands on it; nothing on
 	     Penalty still holds it. -->
+	<string name="msg_penalty_first_drawtwo">%1$s draws %2$d cards (Draw 2 from %3$s)...</string>
+	<string name="msg_penalty_stacked_drawtwo">%1$s draws %2$d cards (Draw 2 stacked by %3$s)...</string>
 	<string name="msg_penalty_first_drawfour">%1$s draws %2$d cards (Draw Four from %3$s)...</string>
 	<string name="msg_penalty_stacked_drawfour">%1$s draws %2$d cards (Draw Four stacked by %3$s)...</string>
 	<string name="msg_penalty_first_wild_hd">%1$s draws %2$d cards (Hot Death from %3$s)...</string>

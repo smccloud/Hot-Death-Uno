@@ -23,6 +23,10 @@ class Penalty
 		// next*, which is a property of the penalty it throws rather than of the
 		// card itself -- the same Draw Four card costs 4 as a penalty and 50
 		// points as a hand, and both numbers are true and unrelated.
+		// The draw 2 joins them here rather than staying a bare literal at the call
+		// site, for the reason in the comment above: one number per card, and the
+		// count a player is told comes from the penalty's own running total.
+		const val COUNT_DRAWTWO = 2
 		const val COUNT_DRAWFOUR = 4
 		const val COUNT_HOT_DEATH = 8
 		const val COUNT_DELAYED_BLAST = 4

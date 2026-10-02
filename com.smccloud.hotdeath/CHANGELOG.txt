@@ -664,3 +664,92 @@ Version 1.4.14               2026-10-02
    the second is gone
 
  - test count is 203 unit plus 9 instrumented
+
+
+Version 1.4.15               unreleased
+
+ - the four rules questions of issue #10, decided and implemented. Three of the four
+   were questions and one of those turned out to be a bug
+
+ - question 1, no code change: the 1,000-point hand is Quitter and Fuck You, and
+   Big Brother does not join them. Worth knowing that it does not collide with the
+   instant-loss rule either -- calculateScore gives a four-bastard hand zero
+   before calculateValue ever runs, so that hand already scores 0 and not 1,000.
+   The pair is now pinned by three tests, because a rule that is not a bug is the
+   easiest kind to change by accident
+
+ - question 2a, a bug: under the standardrules cheat -- the one that builds a plain
+   UNO deck -- the victim of a draw 2 drew two and then played their turn. It was
+   the only setting in which that happened, which is a strange thing for the
+   setting whose purpose is to be more standard. assessPenalty advanced past the
+   victim under a guard that only did so when NOT standard rules, so the guard is
+   gone and the victim is always stepped past
+
+ - question 2b: a draw 2 stacks on a draw 2, which it never could. It used to draw
+   inline -- handleSpecialCards called forceDraw and advanced the turn itself, and
+   never touched m_penalty -- and everything that lets a victim *have* a turn
+   lives in the round loop's checkForDefender gate, which only runs when a penalty
+   is pending. So a draw 2 now goes through addCardPenalty like every other draw
+   card, and the machinery that already handled draw four stacking handles this
+   with no new rules
+
+ - checkCard and checkForDefender both gained a draw 2 clause, mirroring the draw
+   four's. checkCard allows a draw 2 onto a draw 2 outside standard rules and only
+   once; checkForDefender counts draw 2s, which is what keeps the victim in the
+   turn that lets them throw one
+
+ - question 3, decided against: Retaliation, AIDS and the Holy Defender do NOT
+   answer a draw 2. checkCard's defender clause lists Wild Draw, Quitter and
+   Glasnost and has always omitted the draw 2, so issue #10's claim that Retaliation
+   already applied was wrong and the README's card table was right. Nothing changed
+   here beyond being pinned
+
+ - that leaves the draw 2 with exactly one answer, itself, which is the same shape
+   the draw four already had. A draw two is the only thing that stops a draw two
+
+ - question 4: a penalty card that opens the round is eaten by the dealer, which is
+   what the FIXME at the top of postDealHands asked for and had done since. The
+   reading is that the dealer is the *victim* -- the seat the card would have hit
+   had a player thrown it -- so a draw 2 makes the dealer draw two, a Glasnost
+   lays their hand face up, a Quitter lets them remove the next player, and a MAD
+   has them pick somebody and be ejected along with them
+
+ - four cards, not "penalties" as a set. A wild can never open a round because the
+   draw skips them, so there is no wild draw four to absorb; Skip and Reverse are
+   excluded because they have no victim and the dealer's turn is not in the
+   rotation, m_startPlayer being getLeftOpp(). Everything goes through
+   assessPenalty rather than being reimplemented, so an opening draw 2 still
+   counts the Luck of the Irish and still shares an AIDS penalty
+
+ - the MAD case is the one worth staring at: the dealer loses their own round to a
+   card nobody chose. That is what the card does to whoever plays it, and it is the
+   reading that needed no new rules -- but it is the part to overrule if it was
+   meant otherwise
+
+ - README: the standardrules cheat was listed as a live known bug, claiming its
+   deck-construction branch was missing and enumerated 324 cards into an array of
+   108. All four combinations of standardRules and oneDeck build correctly --
+   216 and 108 cards, no exception -- and GameRoundLoopTest has been playing two
+   full rounds under the cheat since it was written. The entry is gone
+
+ - the cheat table's row described the old turn order as though it were a feature
+   ("Draw Two no longer grants an extra turn"), which is what the bug above looked
+   like from the outside
+
+ - GameRoundLoopTest.standardRulesDealSevenEach allowed the dealer 9 rather than 7,
+   and says why in the test. It asserts the deal, and the deal is still 7; the
+   difference is the opening card's penalty, which is now that test's job rather
+   than a shuffle-dependent surprise
+
+ - PenaltyRulesTest, 18 tests, 221 unit. The suite had nothing that could see any of
+   this: HandPlayabilityTest covers whether a card is legal and GameRoundLoopTest
+   asserts invariants about a round running, and neither inspected a decision
+
+ - each of the seven behaviours was checked by breaking it on purpose and confirming
+   something fails. Two attempts did not: routing the draw 2 back to its inline
+   draw failed nothing at first because the mutation prepended the old code rather
+   than replacing it, and the checkForDefender clause failed nothing until there was
+   a test for it. Both are now covered -- the routing by aDrawTwoSetsAPenaltyLike-
+   EveryOtherDrawCard and the clause by aDrawTwoInHandKeepsItsVictimInTheTurn
+
+ - test count is 221 unit plus 9 instrumented

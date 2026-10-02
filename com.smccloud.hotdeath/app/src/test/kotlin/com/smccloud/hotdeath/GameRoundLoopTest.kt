@@ -86,6 +86,16 @@ class GameRoundLoopTest
 	 * different set of branches in advanceRound, not merely a different deal. Kept
 	 * apart from the round loop because the deal size is the one thing here that is
 	 * not random.
+	 *
+	 * The dealer is allowed 9, and only because of what `startGame` does after the
+	 * deal: `postDealHands` turns the top card over, and issue #10 made the dealer
+	 * absorb a penalty that opens the round. A plain deck's only such card is the
+	 * Draw 2, so a round opening on one leaves the dealer holding two extra. Every
+	 * other seat is still exactly 7, which is what this test is really about, and
+	 * `PenaltyRulesTest` covers the absorption itself.
+	 *
+	 * Asserted as a stated allowance rather than by pinning the shuffle, so the test
+	 * keeps catching a wrong deal size without becoming a test of the deck order.
 	 */
 	@Test
 	fun standardRulesDealSevenEach ()
@@ -93,11 +103,20 @@ class GameRoundLoopTest
 		val game = newGame(true)
 		game.startGame()
 
+		val dealer = game.getDealer()
+		val openingCard = game.getLastPlayedCard()
+		val dealerAbsorbedTwo = (openingCard != null)
+				&& (openingCard.getValue() == Card.VAL_D)
+
 		for (seat in 1..4)
 		{
 			val p = game.getPlayer(seat - 1)!!
-			assertEquals("standard rules deal 7, seat $seat got "
-					+ p.getHand()!!.getNumCards(), 7, p.getHand()!!.getNumCards())
+			val expected = if ((p === dealer) && dealerAbsorbedTwo) 9 else 7
+
+			assertEquals("standard rules deal 7"
+					+ (if (expected == 9) " (plus the opening draw 2 the dealer ate)" else "")
+					+ ", seat $seat got " + p.getHand()!!.getNumCards(),
+					expected, p.getHand()!!.getNumCards())
 		}
 	}
 

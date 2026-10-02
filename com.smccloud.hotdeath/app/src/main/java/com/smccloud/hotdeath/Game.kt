@@ -781,7 +781,6 @@ class Game private constructor() : Thread()
 	{
 		do
 		{
-			// FIXME!!! the dealer is supposed to eat penalties...
 			m_currCard = m_drawPile!!.drawCard()
 			if (m_currCard != null)
 			{
@@ -790,6 +789,12 @@ class Game private constructor() : Thread()
 				m_currCard!!.setFaceUp(true);
 			}
 		} while (m_currColor == Card.COLOR_WILD);
+
+		// The dealer eats a penalty card that opens the round, which is what the
+		// FIXME above this used to ask for. Deliberately before m_startPlayer is
+		// set, because a Quitter or a MAD opening here changes who is in the round
+		// and the starting seat has to be worked out from that.
+		absorbOpeningPenaltyAtDealer();
 
 		m_startPlayer = m_dealer!!.getLeftOpp();
 		m_numCardsPlayed = 0;
@@ -810,6 +815,95 @@ class Game private constructor() : Thread()
 				return;
 			}
 		}
+	}
+
+	/**
+	 * The dealer absorbs a penalty card that turns up as the round's opening card,
+	 * issue #10 question 4.
+	 *
+	 * The reading, since "eats penalties" does not say it: **the dealer is the
+	 * victim**, the same seat the card would have hit had a player thrown it from
+	 * their hand. So a Draw 2 opening makes the dealer draw two, a Glasnost lays the
+	 * dealer's hand face up, a Quitter lets the dealer remove the next player, and a
+	 * MAD has the dealer pick somebody and then be ejected along with them -- which
+	 * is the one consequence worth staring at, because the dealer loses their own
+	 * round to a card nobody chose. That is what the card does to whoever plays it,
+	 * and this is the reading that needed no new rules.
+	 *
+	 * Four cards, not "penalties" as a set:
+	 *
+	 *  * A wild cannot get here at all -- the loop in `postDealHands` draws past
+	 *    them -- so there is no Wild Draw Four to absorb.
+	 *  * Skip and Reverse are absent on purpose. Neither has a victim, and the
+	 *    dealer's turn is not in the rotation to begin with: `m_startPlayer` is
+	 *    `getLeftOpp()`. There is nobody for them to absorb.
+	 *  * The Spreader and the other value-based action cards are absent for the
+	 *    same reason.
+	 *
+	 * The dealer stands in as the thrower for the duration, which is what makes the
+	 * messages name them and what lets MAD ask them to choose a victim. Everything
+	 * then goes through `assessPenalty` rather than being reimplemented, so a Draw
+	 * 2 opening counts the Luck of the Irish and shares an AIDS penalty exactly as
+	 * a mid-game one does.
+	 *
+	 * The caller resets `m_currPlayer` afterwards, so the turn movement
+	 * `assessPenalty` does here is discarded rather than fought over.
+	 */
+	private fun absorbOpeningPenaltyAtDealer ()
+	{
+		val dealer = m_dealer ?: return
+		val card = m_currCard ?: return
+
+		val currVal = card.getValue();
+		val currID = card.getID();
+
+		val isDrawTwo = (currVal == Card.VAL_D)
+		val isQuitter = (currID == Card.ID_GREEN_0_QUITTER)
+		val isGlasnost = (currID == Card.ID_RED_2_GLASNOST)
+
+		// The player-count floors are the ones handleSpecialCards uses for the same
+		// two cards, so an opening card and a played one cannot disagree about
+		// whether they do anything.
+		val isMad = (currID == Card.ID_YELLOW_1_MAD) && (getActivePlayerCount() > 3)
+
+		if (!(isDrawTwo || isQuitter || isGlasnost || isMad))
+		{
+			return;
+		}
+
+		m_currPlayer = dealer
+
+		if (isMad)
+		{
+			dealer.chooseVictim();
+
+			if (m_stopping)
+			{
+				return;
+			}
+
+			m_penalty!!.setEject(card, dealer, m_players[dealer.getChosenVictim() - 1]);
+			m_penalty!!.setSecondaryVictim(dealer);
+		}
+		else if (isDrawTwo)
+		{
+			m_penalty!!.addCards(card, Penalty.COUNT_DRAWTWO, dealer, dealer);
+		}
+		else if (isQuitter)
+		{
+			if (getActivePlayerCount() > 2)
+			{
+				// The Quitter removes the player after whoever threw it, and the
+				// dealer is now whoever threw it.
+				m_penalty!!.setEject(card, dealer, dealer.getLeftOpp());
+			}
+		}
+		else
+		{
+			m_penalty!!.setFaceup(card, dealer, dealer);
+		}
+
+		assessPenalty();
 	}
 
 	private fun runRound ()
@@ -1180,6 +1274,17 @@ class Game private constructor() : Thread()
 					{
 						return true;
 					}
+				}
+
+				// and a draw 2 stacks on a draw 2, which it could not before issue
+				// #10: the draw 2 branch drew inline and never set a penalty, so
+				// nothing in here was reachable for one. Only onto a draw 2, and
+				// only once, for the reasons in checkForDefender.
+				if (!defenderAlreadyThrown
+					&& (pvalue == Card.VAL_D)
+					&& (cvalue == Card.VAL_D))
+				{
+					return true;
 				}
 			}
 
@@ -1671,6 +1776,26 @@ class Game private constructor() : Thread()
 
 		if (m_penalty!!.getVictim() == m_currPlayer)
 		{
+			// A draw 2 can only be answered by another draw 2. Issue #10 question 3
+			// decided that Retaliation, AIDS and the Holy Defender do *not* apply
+			// to it, so unlike the draw four above this counts draw 2s and nothing
+			// else -- which is also why the victim needs no defender as a ticket
+			// to reach their turn. Holding one is what gets them the turn; it is
+			// not what they may throw.
+			if (prevVal == Card.VAL_D)
+			{
+				if (!defenderAlreadyThrown)
+				{
+					for (i in 0 until h.getNumCards())
+					{
+						if ((h.getCard(i)!!).getValue() == Card.VAL_D)
+						{
+							defenderCount++;
+						}
+					}
+				}
+			}
+
 			if (prevID == Card.ID_RED_0_HD)
 			{
 			}
@@ -1847,15 +1972,18 @@ class Game private constructor() : Thread()
 			m_currPlayer = nextPlayer();
 		}
 
+		// draw 2s, through the penalty like every other draw card rather than drawing
+		// inline. That routing is what makes a draw 2 stackable: the round loop's
+		// "did they get a defender" check only runs when m_penalty is set, so a
+		// draw 2 that drew inline gave its victim no turn to answer it on. The
+		// victim is the same seat either way -- nextPlayer() is getNextPlayer()
+		// plus a resetLastDrawn() on the thrower, which the caller does a few
+		// lines later anyway.
 		if (currVal == Card.VAL_D)
 		{
-			val victim = nextPlayer();
-
-			forceDraw(victim, 2);
-			if (!(m_go!!.getStandardRules()))
-			{
-				m_currPlayer = nextPlayer();
-			}
+			addCardPenalty (m_currPlayer, Penalty.COUNT_DRAWTWO,
+					R.string.msg_penalty_first_drawtwo,
+					R.string.msg_penalty_stacked_drawtwo)
 		}
 
 		// spreaders
@@ -2106,10 +2234,15 @@ class Game private constructor() : Thread()
 			forceDraw(pVictim, numcards);
 			m_currPlayer = pVictim;
 
-			if (!(m_go!!.getStandardRules()))
-			{
-				m_currPlayer = nextPlayer();
-			}
+			// Always step past the victim, under both rule sets. The
+			// `if (!(m_go!!.getStandardRules()))` guard this replaces meant the
+			// cheat code called "standardrules" -- the one that builds a plain UNO
+			// deck -- was the only setting in which a drawn victim got to play on
+			// top of their draw. Plain UNO skips them. Nothing else changes: the
+			// guard already advanced outside standard rules, and the only card
+			// penalties a plain deck can produce are the draw 2 and the draw four,
+			// both of which skip in plain UNO.
+			m_currPlayer = nextPlayer();
 
 			if (pVictim2 != null)
 			{

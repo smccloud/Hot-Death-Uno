@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.14 (`versionCode` 1004014) |
+| Current version | 1.4.15 (`versionCode` 1004015), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -198,8 +198,29 @@ an optional secondary victim:
 | reveal the victim's hand | `PENTYPE_FACEUP` |
 
 Splitting a penalty (AIDS) gives each victim `(n + 1) / 2` cards. Luck of the Irish
-decrements the count by one. Stacking is permitted for Wild Draw cards under Hot Death
-rules; Draw 2s, Spreaders, and Mystery Draw can never be stacked.
+decrements the count by one.
+
+**Stacking** is permitted under Hot Death rules, and only there. A Wild Draw answers
+another Wild Draw, and a **Draw 2 answers another Draw 2** — the same card is the only
+answer either way. Mystery Draw and the Harvester of Sorrows are excluded, as are
+Spreader and Skip. Whether a victim gets the turn that lets them answer at all is
+`Game.checkForDefender`, which counts the cards that can answer *that* penalty: a Draw
+Four's stack, or a Draw 2 for a Draw 2.
+
+**The victim is always stepped past**, under both rule sets. They draw and lose their
+turn, which is what plain UNO does; `standardrules` used to be the one setting in which
+they drew and then played.
+
+**Retaliation, AIDS and the Holy Defender do not answer a Draw 2.** They answer a Wild
+Draw, a Quitter or a Glasnost, which is what the card set table above says. A Draw 2
+in hand is therefore the only thing that answers a Draw 2.
+
+**A penalty card that opens the round is eaten by the dealer.** `postDealHands` turns
+the top card over, and if that card is a Draw 2, a Quitter, a Glasnost or a MAD, the
+dealer is its victim — they draw the two, lay their hand face up, remove the next
+player, or pick a victim and be ejected with them. A wild can never open a round (the
+draw skips them) so there is no Wild Draw Four to absorb, and Skip and Reverse are
+excluded because they have no victim and the dealer's turn is not in the rotation.
 
 ---
 
@@ -314,11 +335,7 @@ Matching is a plain `String.contains()` in `GameOptions`.
 | Code | Effect |
 |---|---|
 | `originalhotdeath` | Turns off family-friendly mode, restoring the card names **Fuck You**, **AIDS**, and **Shitter** |
-| `standardrules` | Switches to a plain UNO ruleset: fixed 7-card deal, no defensive plays, no Draw Four stacking, Draw Two no longer grants an extra turn, and the target score drops to 500 |
-
-> `standardrules` is currently **broken** — the deck-construction branch for it is
-> missing a `oneDeck` case and enumerates more cards than the array it writes into. See
-> [Development notes](#development-notes).
+| `standardrules` | Switches to a plain UNO ruleset: fixed 7-card deal, no defensive plays, no card-penalty stacking at all, and the target score drops to 500 |
 
 ---
 
@@ -595,10 +612,6 @@ Three behavioral changes came with the retarget:
 
 ### Known bugs
 
-- **`standardrules` cheat code is non-functional.** The `standardRules && !oneDeck`
-  branch in `CardDeck.reset()` is missing, and the `standardRules` branch that does
-  exist enumerates 324 cards into an array sized for 108. It will throw
-  `ArrayIndexOutOfBoundsException` or build an empty deck.
 - **`gradle-wrapper.jar` is still not committed** — `gradlew` will not run until you
   generate it. See [Building](#building).
 - ~~**Snapshot corruption is swallowed.** Both the `Game(JSONObject, ...)` constructor and

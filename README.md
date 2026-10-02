@@ -548,7 +548,9 @@ Three behavioral changes came with the retarget:
   and rethrow, and `GameActivity`'s existing `if (m_game == null)` fallback — which was
   dead code for as long as the constructor swallowed the exception — starts a new game.
   `org.json` names the missing key, so the log line says which field of the save is
-  wrong. See [#2](https://github.com/smccloud/Hot-Death-Uno/issues/2).
+  wrong. The player is told too — a Toast, since the new game looks exactly like a
+  resumed one — and the unreadable string is cleared so `Continue` stops offering a
+  save that is known to be unreadable. See [#2](https://github.com/smccloud/Hot-Death-Uno/issues/2).
 - **Toast durations can go negative.** `GameTable` computes the duration as
   `getDelay() - 500`, which is negative both during fast-forward (`0`) and while the
   human seat is inactive (`250`).

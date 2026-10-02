@@ -317,4 +317,32 @@ Version 1.4.8                unreleased
    and seat 0's right-hand opponent is seat 1. Without it a fix that rejected
    every save would pass the other five tests
 
- - test count is 148 unit plus 9 instrumented
+ - the player is now told. A discarded save was previously invisible from the
+   table: the new game looks exactly like a resumed one, so their saved game
+   disappeared with no sign it had ever been there. A Toast says so before play
+   starts, LENGTH_LONG because the default is short enough to miss while the
+   table is being laid out. A Toast rather than a dialog on purpose -- a modal
+   would have to be dismissed before play, to say the one thing there is no
+   action available for
+
+ - the unreadable save is dropped rather than left for the next launch to fail
+   on again. onPause writes a fresh snapshot, but only once this activity has
+   been paused, and until then Main.onResume keeps offering "Continue" for a
+   string known to be unreadable -- so a player who backs out and comes straight
+   back in gets the same failure and the same toast with nothing new to show for
+   it. Clearing the preference is the point at which we know it cannot be read
+
+ - five more tests, on what the player sees rather than on what the constructor
+   does. Four of them drive the real GameActivity.onCreate -- the constructor
+   tests cannot reach the toast or the preference, because onCreate is where both
+   live. anUnreadableSaveFallsBackToANewGame asserts getDeck() is null, which is
+   the plain constructor's state and therefore says the fallback was taken; a
+   resumed game has a deck even when the rest of the parse failed. It does not
+   assert the absence of a crash, because the game thread is not running and
+   checkCard is never reached -- the absence would have passed either way
+
+ - aGoodSaveIsResumedAndKept is the control for all four: a good save is still
+   resumed and still in preferences, so a fix that cleared "gamestate"
+   unconditionally would fail it
+
+ - test count is 153 unit plus 9 instrumented

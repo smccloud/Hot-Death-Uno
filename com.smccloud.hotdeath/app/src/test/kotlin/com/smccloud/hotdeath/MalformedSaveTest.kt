@@ -6,7 +6,9 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -15,6 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowToast
 
 /**
  * Covers the malformed-save path: GameActivity stores a gamestate JSON in
@@ -58,11 +61,18 @@ class MalformedSaveTest
 		// All four seats computer, so nothing in the constructors below waits on a
 		// tap. Game reads this preference to decide what goes in seat 0, so it has
 		// to be set before the Game is built.
+		//
+		// "gamestate" is cleared as well, because the tests below read it back to
+		// assert what happened to a discarded save, and Robolectric shares one
+		// default SharedPreferences across the whole class. Without this, a test
+		// that ran after aGoodSaveIsResumedAndKept would start from whatever that
+		// one left behind.
 		PreferenceManager.getDefaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putBoolean("computer_4th", true)
 			.putString("cheat_code", "")
+			.remove("gamestate")
 			.commit()
 
 		m_activity = Robolectric.buildActivity(GameActivity::class.java).get()
@@ -283,5 +293,191 @@ class MalformedSaveTest
 			// Expected; the message names an index for this one, which is why the
 			// other cases assert on the text and this one does not.
 		}
+	}
+
+	// ------------------------------------------------- what the player sees
+
+	/**
+	 * The rest of this class tests the constructor directly, because that is where
+	 * the half-built Game came from. These two go through `GameActivity.onCreate`
+	 * instead, because the other half of the fix is there: the save is discarded,
+	 * the player is told, and a new game starts. None of that is reachable from
+	 * the constructor.
+	 *
+	 * The activity is built with `create()`, which is one step short of `setup()`
+	 * and deliberately so. `onCreate` is the thing under test and `create()` runs
+	 * it, but `setup()` additionally makes the activity visible, which lays the
+	 * table out, and GameTable.onSizeChanged then starts the game thread for real.
+	 * That thread deals hands, prompts the table, and toasts -- on a background
+	 * thread that outlives the test. The next test's teardown then idles the
+	 * looper, which runs those stale promptUser tasks and toasts a Toast whose
+	 * creating sandbox is long gone, which fails with a NullPointerException out
+	 * of Robolectric's own internals rather than anything to do with this code.
+	 * Leaving the thread unstarted is both the stable choice and the truthful one:
+	 * what is under test is the decision in onCreate, not the round that follows.
+	 */
+
+	/**
+	 * Runs the activity's onCreate over whatever is in the "gamestate" preference,
+	 * with STARTUP_MODE_CONTINUE, and returns the activity.
+	 */
+	private fun launchContinuing (savedState: String): GameActivity
+	{
+		// Toasts accumulate in ShadowToast across tests in a class, so the record
+		// is cleared here rather than read-and-cleared afterwards: the game thread
+		// toasts on its own schedule and a reset afterwards would race it.
+		ShadowToast.reset()
+
+		PreferenceManager.getDefaultSharedPreferences (
+				ApplicationProvider.getApplicationContext())
+			.edit ()
+			.putString ("gamestate", savedState)
+			.commit ()
+
+		val intent = android.content.Intent (
+				m_activity, GameActivity::class.java)
+		intent.putExtra (GameActivity.STARTUP_MODE, GameActivity.STARTUP_MODE_CONTINUE)
+
+		return Robolectric.buildActivity (GameActivity::class.java, intent)
+			.create()
+			.get()
+	}
+
+	/**
+	 * Whether a Toast carrying this exact text has been shown since the last
+	 * [ShadowToast.reset].
+	 *
+	 * `getTextOfLatestToast()` would be the wrong tool here. A resumed game starts
+	 * a round on the game thread and toasts "Tap the draw pile to start next
+	 * hand." straight after onCreate returns, so "the latest toast" is a moving
+	 * target -- asserting on it caught a game message once already. `showedToast`
+	 * accumulates, so it answers the question actually being asked: did *this*
+	 * message appear.
+	 */
+	private fun sawToast (text: String): Boolean
+	{
+		return ShadowToast.showedToast (text)
+	}
+
+	/** The message the player gets when their save cannot be read. */
+	private fun unreadableMessage (): String
+	{
+		return m_activity.getString (R.string.msg_saved_game_unreadable)
+	}
+
+	/**
+	 * The player is told. Without this the save disappears and a new game looks
+	 * exactly like a resumed one, so there is no sign anything went wrong.
+	 */
+	@Test
+	fun anUnreadableSaveTellsThePlayer ()
+	{
+		// Missing "penalty": the save parses as an object, so it gets past
+		// JSONObject(s) and fails inside the resuming constructor. Both routes to
+		// this catch are the same to the player.
+		val save = wellFormedSave()
+		save.remove ("penalty")
+
+		launchContinuing (save.toString())
+
+		assertTrue ("the player should be told their save was discarded",
+				sawToast (unreadableMessage()))
+	}
+
+	/**
+	 * And gets a fresh game rather than a crash on the first card played. This is
+	 * the assertion that says the fallback in `onCreate` is live: without the
+	 * rethrow, `m_game` is a half-built Game rather than null, the activity builds
+	 * it and hands it to the table anyway, and nothing here fails.
+	 *
+	 * What distinguishes the two is `getDeck()`. The plain constructor leaves it
+	 * null and only `resetRound()` builds one, while the resuming constructor sets
+	 * it before the failure -- so null here means the activity took the new-game
+	 * path, and non-null would mean it kept the half-built one. That is asserted
+	 * directly rather than through the absence of a crash, which nothing in this
+	 * test would have caused: the game thread is not running (see
+	 * `launchContinuing`), so `checkCard` is never reached.
+	 *
+	 * `getPenalty()` is null too, which looks like the bug and is not: it is null
+	 * in every plain game until `startRound()`, and the same as the Java. The
+	 * difference from issue #2 is not whether it is null but whether a Game
+	 * carrying a null penalty was allowed to escape a parse that had already
+	 * failed.
+	 */
+	@Test
+	fun anUnreadableSaveFallsBackToANewGame ()
+	{
+		val save = wellFormedSave()
+		save.remove ("penalty")
+
+		val game = launchContinuing (save.toString()).getGame()!!
+
+		assertNull ("the plain constructor's deck, so this is a new game "
+				+ "rather than the half-built one the save would have made",
+				game.getDeck())
+	}
+
+	/**
+	 * The bad save is dropped rather than left for the next launch to fail on
+	 * again. `Main.onResume` only offers "Continue" when "gamestate" is non-empty,
+	 * so a string left behind means the player backs out, comes back in, and
+	 * gets the same unreadable save and the same toast with nothing new to show
+	 * for it.
+	 */
+	@Test
+	fun anUnreadableSaveIsDiscarded ()
+	{
+		val save = wellFormedSave()
+		save.remove ("penalty")
+
+		launchContinuing (save.toString())
+
+		val stored = PreferenceManager.getDefaultSharedPreferences (
+				ApplicationProvider.getApplicationContext())
+			.getString ("gamestate", "")
+		assertEquals ("the unreadable save should not still be in preferences",
+				"", stored)
+	}
+
+	/**
+	 * A string that is not JSON at all takes the other route -- it fails in
+	 * `JSONObject(s)`, before the resuming constructor is ever reached. It has to
+	 * be told about and discarded the same way, and this is the only test that
+	 * goes through it.
+	 */
+	@Test
+	fun aSaveThatIsNotJsonIsAlsoDiscarded ()
+	{
+		launchContinuing ("this is not json at all")
+
+		assertTrue ("a non-JSON save should be reported the same way",
+				sawToast (unreadableMessage()))
+
+		val stored = PreferenceManager.getDefaultSharedPreferences (
+				ApplicationProvider.getApplicationContext())
+			.getString ("gamestate", "")
+		assertEquals ("", stored)
+	}
+
+	/**
+	 * A good save is left alone: no toast, and the preference still holds it, so
+	 * the player can rotate the device and come back to the same game. Without
+	 * this, a fix that cleared "gamestate" unconditionally would pass everything
+	 * above and break resuming.
+	 */
+	@Test
+	fun aGoodSaveIsResumedAndKept ()
+	{
+		val save = wellFormedSave()
+
+		launchContinuing (save.toString())
+
+		assertFalse ("a resumed game needs no explanation",
+				sawToast (unreadableMessage()))
+
+		assertNotNull ("the save should still be in preferences",
+				PreferenceManager.getDefaultSharedPreferences (
+						ApplicationProvider.getApplicationContext())
+					.getString ("gamestate", null))
 	}
 }

@@ -85,6 +85,7 @@ class GameActivity : Activity()
 		m_go = GameOptions (this)
 
 		m_game = null
+		var unreadableSave = false
 		if (startup_mode == STARTUP_MODE_CONTINUE)
 		{
 			val prefs = PreferenceManager.getDefaultSharedPreferences(this)
@@ -112,9 +113,19 @@ class GameActivity : Activity()
 				//
 				// Logged rather than swallowed: the exception names the key that was
 				// missing, which is the one thing a bug report needs and the one
-				// thing the player cannot see. A discarded save is silent data loss
-				// otherwise.
+				// thing the player cannot see.
 				Log.e("HDU", "Could not resume the saved game state: " + e.message, e)
+
+				// The save is dropped rather than left to be re-read. onPause writes
+				// a fresh snapshot, but only once this activity has been paused, and
+				// until then Main.onResume keeps offering "Continue" for a string
+				// that is known to be unreadable -- so the player who backs out and
+				// comes straight back in gets the same failure again, and a toast
+				// with no explanation of what happened to their game. Clearing it
+				// here is the point at which we know for certain it cannot be read.
+				prefs.edit ().remove ("gamestate").commit ()
+
+				unreadableSave = true
 			}
 		}
 
@@ -123,6 +134,31 @@ class GameActivity : Activity()
 		if (m_game == null)
 		{
 			m_game = Game (this, m_go!!)
+		}
+
+		if (unreadableSave)
+		{
+			// Told to the player, not just logged. Everything else about this path is
+			// invisible from the table: the new game looks exactly like the resumed
+			// one, so their saved game would otherwise disappear with no sign it had
+			// been there at all.
+			//
+			// A Toast rather than a dialog on purpose. A modal here would have to be
+			// dismissed before play, and the thing it would be saying is "nothing you
+			// can do about this" -- the save is already gone and a new game has
+			// already been built. There is no decision to put in front of the player.
+			//
+			// LENGTH_LONG because the default is short enough to miss while the table
+			// is being laid out, and this is the only notice the player gets.
+			//
+			// android.widget.Toast fully qualified for the reason GameTable.kt:27
+			// sets out: GameTable has a member method called Toast, and importing the
+			// class here would be the same shadowing problem one class over. It does
+			// not arise in this file, so the import is the readable choice.
+			android.widget.Toast.makeText (
+					this,
+					getString (R.string.msg_saved_game_unreadable),
+					android.widget.Toast.LENGTH_LONG).show ()
 		}
 
 		m_gt = GameTable(this, m_game!!, m_go!!)

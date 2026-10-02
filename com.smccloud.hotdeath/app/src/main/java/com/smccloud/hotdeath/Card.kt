@@ -295,9 +295,28 @@ class Card(
 			else -> strValue = "" + m_value
 		}
 
-		// The trailing space in the cardcolor_* strings is the separator, so
-		// adding another one here is what used to double-space every label.
-		return strColor + strValue
+		// The separator is added here rather than carried by the trailing space on
+		// the cardcolor_* strings, because that space does not survive the build.
+		// The compiled resources.arsc holds "Green" and never "Green ", so
+		// `strColor + strValue` was producing "Green5" in the shipped app -- in the
+		// card help dialog's title, in the log line for every play, and in the
+		// "North draws Green5" the draw message renders. The comment here used to
+		// say the trailing space was the separator, and it read as though the space
+		// were deliberate; it was never there at runtime, so nothing doubled up
+		// either and the labels have been unspaced this whole time.
+		//
+		// `trim()` rather than removing the space from the four strings, because
+		// the resources are also read as labels elsewhere and a change there would
+		// not be picked up by anything.
+		//
+		// An unknown colour leaves strColor empty, and a leading space in front of
+		// the value would be worse than none.
+		if (strColor.isEmpty())
+		{
+			return strValue
+		}
+
+		return strColor.trim() + " " + strValue
 	}
 
 	fun toJSON (): JSONObject

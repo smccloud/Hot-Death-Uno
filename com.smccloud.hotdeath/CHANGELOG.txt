@@ -390,3 +390,57 @@ Version 1.4.9                2026-10-02
    let a stray %4$s through to throw on a penalty card in front of a player
 
  - test count is 161 unit plus 9 instrumented
+
+
+Version 1.4.10               unreleased
+
+ - an accepted card now says so. A rejected one has said "That card's no good"
+   since 1.4.x and an accepted one said nothing at all, so on a small table a
+   legal play was indistinguishable from a tap that never registered. The human
+   player's turn now reports "South plays Green 5" from the same branch that
+   reports the refusal. Fixes #4
+
+ - no "another" variant, which the issue proposed as "North threw another green
+   5". It needs a judgement about what "another" means -- a second consecutive
+   match of the colour, or an exact repeat of the card -- and checkCard returns a
+   boolean rather than a reason, so either reading would infer why the play was
+   legal from state the game never recorded. The message confirms the play
+   registered, which is the gap. Explaining the legality is a separate and larger
+   piece of work
+
+ - the descriptor is Game.cardToString, which the issue proposed writing from
+   scratch. It already existed and was already rendering in a sentence:
+   msg_player_draws_specific_card has said "North draws Green 5" since the card
+   help was added. Reusing it is why the two sentences sit side by side on the
+   table with the same capitalisation. The colour is capitalised to match, rather
+   than lower-cased as the issue wrote it
+
+ - BUG FIX, and it is the reason the message reads properly. Card labels had no
+   space in them: the card help dialog's title, every log line for a play, and
+   the draw message all said "Green5". The separator was the trailing space on the
+   four cardcolor_* strings, and that space does not survive the build -- aapt2
+   strips it, and the compiled resources.arsc contains "Green" with no space. The
+   comment in toString said the trailing space was the separator and that adding
+   another was what used to double-space every label; it read as deliberate, and
+   nothing doubled up because there was nothing there to double. toString now
+   owns the join itself
+
+ - CardTextTest had five expectations that read the colour from the same stripped
+   resource the code did, so they agreed with the defect rather than the intent
+   and passed while it happened. Its closing note predicted this exactly --
+   "strip the trailing space out of strings.xml and every one of them still
+   passes, leaving Blue7" -- and the only guard it added was for a double space.
+   The missing counterpart is there now, everyColouredCardIsTwoWords, asserting
+   one space and not two, which is what a dropped join fails
+
+ - new CardPlayMessageTest, 5 tests. This is the first test that watches a message
+   arrive rather than checking what the code formats: it drives
+   HumanPlayer.turnDecisionPlayCard and reads what reached the table, because the
+   gap was that nothing was emitted at all and only an emitted message shows that.
+   It lays a GameTable out by hand, because Toast positions itself off
+   m_ptMessages and that is only built in onSizeChanged, and it leaves
+   fastForward off -- promptUser returns immediately when it is on, which would
+   make the test pass without a message ever being sent. The refusal path, the
+   card-not-in-hand path and the flags the round loop reads are pinned alongside
+
+ - test count is 167 unit plus 9 instrumented

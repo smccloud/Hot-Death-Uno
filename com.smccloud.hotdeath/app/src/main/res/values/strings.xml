@@ -49,6 +49,25 @@
 	<string name="cardname_yellow_69">69</string>
 	
 	<string name="msg_dealing">%1$s deals %2$d cards</string>
+	<!-- The accepted-play counterpart to msg_card_no_good. A rejected card said
+	     "That card's no good" and an accepted one said nothing at all, so on a
+	     small table there was no way to tell a legal play from a tap that did
+	     not register. Two arguments: seat, then the card descriptor.
+
+	     The descriptor is Game.cardToString, the same one msg_player_draws_specific_card
+	     already renders in a sentence, so this reads "North plays Green 5" beside
+	     "North draws Green 5". Capitalised colour included: that is what the
+	     existing sentence says, and two capitalisations on one table would be
+	     worse than either.
+
+	     No "another" variant. The issue proposed "North threw another green 5",
+	     which needs a judgement about what "another" means, whether a second
+	     consecutive match of the colour, or an exact repeat of the card, and
+	     checkCard returns a boolean rather than a reason, so any such wording
+	     would infer why the play was legal from state the game never recorded.
+	     This message confirms the play registered, which is the gap; explaining
+	     the legality is a separate and larger piece of work. -->
+	<string name="msg_card_played">%1$s plays %2$s</string>
 	<string name="msg_card_no_good">That card\'s no good</string>
 	<string name="msg_shuffling_discard">Shuffling %d cards from the discard pile</string>
 	<string name="msg_shuffling_discard_1">Shuffling 1 card from the discard pile</string>

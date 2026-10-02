@@ -2257,6 +2257,30 @@ class Game private constructor() : Thread()
 		Log.d("HDU", seatToString (p.getSeat()) + " plays " + cardToString(c));
 	}
 
+	/**
+	 * Say that a card was accepted on the human's turn.
+	 *
+	 * The counterpart to the "That card's no good" that a rejected play produces.
+	 * Both halves of that pair are emitted from `HumanPlayer.turnDecisionPlayCard`,
+	 * so the two sit next to each other rather than one in Game and one in the
+	 * player.
+	 *
+	 * The sentence is built here rather than in `HumanPlayer` because `seatToString`
+	 * is private to this file and the card descriptor needs `m_gt` for a context.
+	 * Both already existed; this only puts them in one place.
+	 *
+	 * `wait` is false, as it is for the rejection: the play has been accepted and
+	 * the game thread is about to make it happen, so blocking the UI thread to let
+	 * a toast fade would stall the turn it is confirming.
+	 */
+	internal fun promptCardPlayed (p: Player, c: Card)
+	{
+		promptUser (String.format (
+				getString (R.string.msg_card_played),
+				seatToString (p.getSeat()),
+				cardToString (c)), false);
+	}
+
 	fun cardToString (c: Card): String
 	{
 		return c.toString(m_gt!!.getContext(), m_go!!.getFamilyFriendly());

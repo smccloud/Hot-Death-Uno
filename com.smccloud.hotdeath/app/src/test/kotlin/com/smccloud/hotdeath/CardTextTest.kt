@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,32 +33,35 @@ class CardTextTest
 	}
 
 	/**
-	 * An unremarkable numbered card reads colour then value. The single space
-	 * between them is the trailing space that the colour strings in strings.xml
-	 * carry; toString adds none of its own.
+	 * An unremarkable numbered card reads colour, one space, then the value.
+	 *
+	 * The space is added by toString's join. It used to be the trailing space on
+	 * the cardcolor_* strings, which does not survive the build: the compiled
+	 * resources.arsc holds "Blue" and never "Blue ", so every label in the shipped
+	 * app read "Blue7". See the class note at the bottom of this file.
 	 */
 	@Test
 	fun aNumberedCardIsPrefixedWithItsColour ()
 	{
 		val c = Card(0, Card.COLOR_BLUE, 7, Card.ID_BLUE_7, 7)
 
-		assertEquals(m_context.getString (R.string.cardcolor_blue) + 7, c.toString (m_context))
+		assertEquals(m_context.getString (R.string.cardcolor_blue).trim() + " " + 7,
+				c.toString (m_context))
 	}
 
 	/**
 	 * The ID switch only covers the named cards. Everything else falls through
 	 * to the value switch, which is what gives Reverse its name here.
 	 *
-	 * The colour is still prepended on this path, and again the separation is
-	 * the colour string's own trailing space rather than a join of its own.
+	 * The colour is still prepended on this path, joined by the same single space.
 	 */
 	@Test
 	fun aReverseCardIsNamedByItsValue ()
 	{
 		val c = Card(0, Card.COLOR_GREEN, Card.VAL_R, Card.ID_GREEN_R, 20)
 
-		assertEquals(m_context.getString (R.string.cardcolor_green)
-			+ m_context.getString (R.string.cardval_r), c.toString (m_context))
+		assertEquals(m_context.getString (R.string.cardcolor_green).trim()
+			+ " " + m_context.getString (R.string.cardval_r), c.toString (m_context))
 	}
 
 	@Test
@@ -65,8 +69,8 @@ class CardTextTest
 	{
 		val c = Card(0, Card.COLOR_RED, Card.VAL_D, Card.ID_RED_D, 20)
 
-		assertEquals(m_context.getString (R.string.cardcolor_red)
-			+ m_context.getString (R.string.cardval_d), c.toString (m_context))
+		assertEquals(m_context.getString (R.string.cardcolor_red).trim()
+			+ " " + m_context.getString (R.string.cardval_d), c.toString (m_context))
 	}
 
 	@Test
@@ -106,7 +110,8 @@ class CardTextTest
 	{
 		val c = Card(0, Card.COLOR_YELLOW, 5, Card.ID_YELLOW_5, 5)
 
-		assertEquals(m_context.getString (R.string.cardcolor_yellow) + 5, c.toString (m_context))
+		assertEquals(m_context.getString (R.string.cardcolor_yellow).trim() + " " + 5,
+				c.toString (m_context))
 	}
 
 	@Test
@@ -151,15 +156,21 @@ class CardTextTest
 	{
 		val c = Card(0, Card.COLOR_YELLOW, 0, Card.ID_YELLOW_0, 0)
 
-		assertEquals(m_context.getString (R.string.cardcolor_yellow) + 0, c.toString (m_context))
+		assertEquals(m_context.getString (R.string.cardcolor_yellow).trim() + " " + 0,
+				c.toString (m_context))
 	}
 
 	/**
-	 * The expectations above are written against the resource strings, so on
-	 * their own they cannot tell one space from two: strip the trailing space out
-	 * of strings.xml and every one of them still passes, leaving "Blue7". What
-	 * pins the shape of the rendered label is this one -- a card name with a gap
-	 * in it is the defect, whichever half of the join owns the space.
+	 * The expectations above are written against the resource strings, so on their
+	 * own they cannot tell one space from two, nor two from none.
+	 *
+	 * That was not hypothetical. The trailing space on the cardcolor_* strings
+	 * does not survive the build -- aapt2 strips it, and the compiled
+	 * resources.arsc contains "Blue" with no space -- so the labels were rendering
+	 * as "Blue7" in the shipped app, and every expectation here passed while it
+	 * did, because it read the same stripped resource the code did. Only the
+	 * double-space guard below existed; the missing one is the defect that actually
+	 * occurred, and toString now owns the separator itself.
 	 */
 	@Test
 	fun noCardLabelCarriesADoubleSpace ()
@@ -178,6 +189,41 @@ class CardTextTest
 		{
 			val label = c.toString (m_context)
 			assertFalse('"' + label + "\" reads with a gap in it", label.contains ("  "))
+		}
+	}
+
+	/**
+	 * The other half of that guard: exactly one space between a colour and a value.
+	 *
+	 * Written against the shape rather than against the resources on purpose, and
+	 * it is the test that would have caught "Blue7". A card whose colour is
+	 * prepended has to be readable as two words, so it must contain a space and
+	 * must not contain two. The cards whose names are single words are excluded by
+	 * construction -- they take the early return and carry no colour.
+	 *
+	 * The value half is what makes it a real check rather than a restatement: if
+	 * the join were dropped again, `contains(" ")` would fail on every one of them.
+	 */
+	@Test
+	fun everyColouredCardIsTwoWords ()
+	{
+		val cards = arrayOf(
+			Card(0, Card.COLOR_BLUE, 7, Card.ID_BLUE_7, 7),
+			Card(0, Card.COLOR_GREEN, Card.VAL_R, Card.ID_GREEN_R, 20),
+			Card(0, Card.COLOR_RED, Card.VAL_D, Card.ID_RED_D, 20),
+			Card(0, Card.COLOR_YELLOW, Card.VAL_S_DOUBLE, Card.ID_YELLOW_S_DOUBLE, 40),
+			Card(0, Card.COLOR_YELLOW, Card.VAL_R_SKIP, Card.ID_YELLOW_R_SKIP, 20),
+			Card(0, Card.COLOR_YELLOW, 0, Card.ID_YELLOW_0, 0),
+			Card(0, Card.COLOR_YELLOW, 9, Card.ID_YELLOW_9, 9))
+
+		for (c in cards)
+		{
+			val label = c.toString (m_context)
+
+			assertTrue('"' + label + "\" should read as colour then value",
+					label.contains (" "))
+			assertFalse('"' + label + "\" should have exactly one space between them",
+					label.contains ("  "))
 		}
 	}
 }

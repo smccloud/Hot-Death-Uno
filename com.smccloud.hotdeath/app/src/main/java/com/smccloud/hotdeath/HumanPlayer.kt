@@ -53,6 +53,15 @@ open class HumanPlayer : Player
 			m_wantsToPlayCard = true
 			m_lastDrawn = null
 			m_turnDecision = true
+
+			// The other half of the pair below. A rejected card said "That card's
+			// no good" and an accepted one said nothing, which on a small table left
+			// a legal play indistinguishable from a tap that never registered.
+			//
+			// After the flags, so the state the message describes is already
+			// settled by the time the toast is posted -- promptUser does not block,
+			// but the ordering costs nothing and reads correctly.
+			m_game!!.promptCardPlayed(this, c)
 		}
 		else
 		{

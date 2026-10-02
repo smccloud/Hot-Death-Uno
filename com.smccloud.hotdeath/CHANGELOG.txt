@@ -574,7 +574,7 @@ Version 1.4.13               2026-10-02
  - test count is 182 unit plus 9 instrumented
 
 
-Version 1.4.14               unreleased
+Version 1.4.14               2026-10-02
 
  - Expert AI, issue #6: hoard wilds, count what the opponents are holding, and
    lead a colour chosen against the table rather than against itself. The last of

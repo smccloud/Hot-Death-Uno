@@ -392,7 +392,7 @@ Version 1.4.9                2026-10-02
  - test count is 161 unit plus 9 instrumented
 
 
-Version 1.4.10               unreleased
+Version 1.4.10               2026-10-02
 
  - an accepted card now says so. A rejected one has said "That card's no good"
    since 1.4.x and an accepted one said nothing at all, so on a small table a

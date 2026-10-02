@@ -637,7 +637,7 @@ Android refuses to install a build whose code is not greater than the installed 
 and refuses to replace a differently signed build at the same code — and neither
 failure is visible until someone tries the install. `gradle verifyVersionCode` checks
 it against the highest published `v*` tag, and the Jenkinsfile runs it before the
-release build. Before 1.4.6 that rule was stated in a comment in `build.gradle` and
+release build. Before 1.4.7 that rule was stated in a comment in `build.gradle` and
 enforced by hand, with nothing in CI reading the version at all.
 
 The patch has three digits, so it runs out at 999; bump the minor and reset the patch
@@ -647,7 +647,7 @@ Earlier versions carried a patch number documented as "the count of passing test
 1.3.167 reading as 140 unit plus 27 instrumented. That was inaccurate from the start:
 `src/androidTest` has only ever held 9 tests, so the real total was 149, and the scheme
 had in any case been abandoned at 1.4.0. The miscount is recorded at 1.1.143 in the
-changelog. 1.4.6 is the first release under the plain scheme.
+changelog. 1.4.7 is the first release under the plain scheme.
 
 See [`CHANGELOG.txt`](com.smccloud.hotdeath/CHANGELOG.txt) for the full release history —
 1.0.5 and everything before it is the original author's, and 1.1.0 onward is 2026.

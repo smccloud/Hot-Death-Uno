@@ -128,7 +128,7 @@ Version 1.1.143              2026-09-30
    tests, 116 unit plus 27 instrumented". That was never accurate. The
    instrumented suite has only ever held 9 tests (PenaltyStackTest's 6 plus
    MainLaunchTest's 3), so the real total was 125, not 143. The number was
-   carried forward by adding rather than recomputing. See version 1.4.6.
+   carried forward by adding rather than recomputing. See version 1.4.7.
 
 Version 1.2.0                2026-09-30
 
@@ -189,13 +189,13 @@ Version 1.4.5                2026-10-01
    conversion that also rewrites its own tests cannot tell a migration regression
    from a test that changed its mind
 
-Version 1.4.6                2026-10-01
+Version 1.4.7                2026-10-01
 
- - VERSIONING FIXED. The scheme documented in build.gradle claimed the patch
-   number was the count of passing tests. It had not been since 1.4.0, and it
-   had never matched the real counts either (see the 1.1.143 note above). Now:
-   plain MAJOR.MINOR.PATCH, with the patch a release counter within the minor
-   line
+ - VERSIONING FIXED, and this is the first release under the new scheme. The
+   scheme documented in build.gradle claimed the patch number was the count of
+   passing tests. It had not been since 1.4.0, and it had never matched the real
+   counts either (see the 1.1.143 note above). It is now plain
+   MAJOR.MINOR.PATCH, with the patch a release counter within the minor line
 
  - versionCode is derived from versionName in the build script rather than typed
    alongside it, so the two cannot disagree. The encoding is unchanged --
@@ -207,12 +207,6 @@ Version 1.4.6                2026-10-01
    Jenkinsfile runs it before the release build, and its Checkout stage now
    fails if the tags were not fetched, since the task cannot compare anything
    without them
-
- - no application code changed. The test count is unchanged at 140 unit plus 9
-   instrumented
-     
-
-Version 1.4.7                2026-10-01
 
  - the test suite is Kotlin, which finishes the 1.4.5 migration: there is no
    Java source left anywhere in the repository. The 11 test files moved from

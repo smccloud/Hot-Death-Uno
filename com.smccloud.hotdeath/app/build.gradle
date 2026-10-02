@@ -68,10 +68,10 @@ abstract class VerifyVersionCode extends DefaultTask {
                 continue
             }
             // Find the version a tag declares, which is one of two shapes. Tags up to
-            // v1.4.5 wrote `versionName "1.4.5"` directly; from v1.4.6 the
-            // literal moved up to `def appVersion = '1.4.6'` and the line inside
+            // v1.4.5 wrote `versionName "1.4.5"` directly; from v1.4.7 the
+            // literal moved up to `def appVersion = '1.4.7'` and the line inside
             // defaultConfig reads `versionName appVersion`. Matching only the
-            // first shape would make this task skip v1.4.6 and every tag after
+            // first shape would make this task skip v1.4.7 and every tag after
             // it -- so it would compare against v1.4.5 forever and never notice
             // a release that reused a versionCode. Both are anchored on the whole
             // trimmed line, so a version quoted inside a comment does not match.
@@ -102,8 +102,8 @@ abstract class VerifyVersionCode extends DefaultTask {
 
         // A tag pointing at the commit being built is this release being tagged
         // now, not a published version it has to beat. Comparing against it would
-        // make the release commit fail its own gate: v1.4.6 tagged on the commit
-        // that declares 1.4.6 is 1004006 against 1004006, and every tag after
+        // make the release commit fail its own gate: v1.4.8 tagged on the commit
+        // that declares 1.4.8 is 1004008 against 1004008, and every tag after
         // this would go red the moment it was cut. So a tag on HEAD is the
         // release in progress and is excluded from the baseline. What remains is
         // everything actually published before it, which is what the check is for.
@@ -399,9 +399,9 @@ dependencies {
 // this one" is not a reliable thing to compare against.
 //
 // A tag on HEAD is excluded, because that is the release being cut rather than a
-// version already published. Without that, tagging v1.4.6 on the commit that
-// declares 1.4.6 would make the release commit fail its own check -- 1004006
-// against 1004006 -- and the pipeline would go red on the tagged build that is
+// version already published. Without that, tagging v1.4.8 on the commit that
+// declares 1.4.8 would make the release commit fail its own check -- 1004008
+// against 1004008 -- and the pipeline would go red on the tagged build that is
 // supposed to be the good one.
 //
 // Only a strictly lower versionCode fails. Declaring exactly the published code

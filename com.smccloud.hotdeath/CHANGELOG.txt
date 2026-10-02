@@ -446,7 +446,7 @@ Version 1.4.10               2026-10-02
  - test count is 167 unit plus 9 instrumented
 
 
-Version 1.4.11               unreleased
+Version 1.4.11               2026-10-02
 
  - the 4th computer seat reads North's difficulty on purpose, and now says so
    where it matters. ComputerPlayer's else branch fell through to p2 under a

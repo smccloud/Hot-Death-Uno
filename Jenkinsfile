@@ -649,6 +649,25 @@ node {
           # so the level is out rather than left parked as known-failing. Add
           # it back as "37:37.2:google_apis_ps16k" once an image works.
           #
+          # Re-checked before every attempt, because the fix is upstream and the
+          # way to see it has landed is to compare what is published against what
+          # is installed here. As of 2026-10-02 sdkmanager still publishes
+          # android-37.0;google_apis revision 6 and android-37.2;google_apis_ps16k
+          # revision 5, which are exactly the two revisions installed under
+          # $SDK/system-images and the two that were tested. No newer image exists,
+          # so restoring the entry now would only repeat the failure. Re-run the
+          # comparison rather than trusting this comment to still be true.
+          #
+          # Untested, and not worth a build each on current evidence: 37.1's
+          # google_apis_ps16k (revision 9), and 37.0's google_apis_playstore and
+          # google_apis_playstore_ps16k. 37.0 and 37.2 already failed two
+          # different ways, so the problem is not confined to one image, but 37.1
+          # is a genuinely different build rather than a rebuild of either.
+          #
+          # Note what is NOT there: no android-37.x;default;x86_64 is published at
+          # any revision, so there is no AOSP fallback. An earlier note in TODO.md
+          # named one; it was wrong.
+          #
           # KNOWN_FAILING is kept because a future level may need it: those
           # levels still run -- they are how we find out when the app starts
           # working on a new platform -- but their results are archived rather
@@ -906,6 +925,53 @@ node {
               fi
             fi
 
+            # A level that ran no tests is not a pass. This is the false green
+            # issue #8 records, and it is why the matrix entry for api37 cannot be
+            # restored on trust: api37 was reported green on a run where it
+            # executed nothing, because the suite ran against a stale api36 that
+            # was still attached while api37 itself came up offline and was
+            # skipped.
+            #
+            # connectedDebugAndroidTest exits 0 in that case. Gradle found a
+            # device, ran the instrumentation against it, and reported success --
+            # against the wrong one -- and the results directory is empty or
+            # holds another level's file. Nothing above notices: `ran` is appended
+            # on the exit code alone, and the junit step publishes with
+            # allowEmptyResults, so an empty result set is not a failure either.
+            #
+            # So the count is checked here, where this level's device was known to
+            # be the one booted. The tests attribute of the testsuite element is
+            # the count AGP wrote for this run; summed over the files, it is what
+            # actually executed. Nine per level: 3 in MainLaunchTest, 6 in
+            # PenaltyStackTest.
+            RESULTS=app/build/outputs/androidTest-results/connected/debug
+            ran_tests=0
+            for f in "\$RESULTS"/TEST-*.xml; do
+              [ -f "\$f" ] || continue
+              # The sed backslashes are doubled for Groovy. A single one is not a
+              # valid escape inside this sh block, so it collapses to a bare
+              # parenthesis, the expression matches nothing, and every level counts
+              # zero and fails the build. Found by parsing the file, which is the
+              # only reason this is caught before a build rather than during one.
+              n=\$(sed -n 's/.*<testsuite[^>]*[[:space:]]tests="\\([0-9][0-9]*\\)".*/\\1/p' "\$f" | head -1)
+              ran_tests=\$((ran_tests + \${n:-0}))
+            done
+            echo "\$AVD: executed \$ran_tests test(s)" >&2
+            if [ "\$ran_tests" -eq 0 ]; then
+              echo "NO TESTS RAN on \$AVD, which is not a pass" >&2
+              if [ "\$enforced" = 'yes' ]; then
+                echo "An enforced level that executed nothing has told us nothing" >&2
+                echo "about the app, so it fails the build rather than reporting" >&2
+                echo "green. See issue #8." >&2
+                failed="\$failed \$AVD"
+              else
+                echo "\$AVD is a known-failing level and a non-enforced one, so this" >&2
+                echo "is recorded rather than failed -- but it is evidence of" >&2
+                echo "nothing, not evidence of a failure." >&2
+                known_failed="\$known_failed \$AVD"
+              fi
+            fi
+
             # Keep this level's XML. AGP empties
             # outputs/androidTest-results/connected/debug on every run, so with a
             # sequential matrix each level would otherwise overwrite the last and
@@ -935,8 +1001,7 @@ node {
             # window, so the next level would have booted alongside it. So
             # escalate rather than hope: kill the console, then the process,
             # then force it, and only believe the list once it is empty.
-"\$ADB" emu kill > /dev/null 2>&1 || true
-          kill "\$EMU_PID" > /dev/null 2>&1 || true
+            "\$ADB" emu kill > /dev/null 2>&1 || true
             kill "\$EMU_PID" > /dev/null 2>&1 || true
             torn_down=0
             attempt=0

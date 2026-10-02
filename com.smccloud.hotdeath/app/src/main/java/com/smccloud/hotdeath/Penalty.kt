@@ -10,6 +10,28 @@ class Penalty
 		const val PENTYPE_CARD = 1
 		const val PENTYPE_EJECT = 2
 		const val PENTYPE_FACEUP = 3
+
+		// What each penalty card is worth, in cards drawn. These used to be bare
+		// literals at the six addCards call sites in Game.handleSpecialCards, one
+		// per card, with a seventh value for Mystery Draw worked out from the card
+		// it covered. Nothing tied them to each other or to the messages, so a
+		// number in one place and the count a player is told in another could
+		// disagree. Here they cannot: there is one number per card, and the
+		// messages are formatted from the penalty's own running total.
+		//
+		// Deliberately not on Card. These are what the card costs *whoever is
+		// next*, which is a property of the penalty it throws rather than of the
+		// card itself -- the same Draw Four card costs 4 as a penalty and 50
+		// points as a hand, and both numbers are true and unrelated.
+		const val COUNT_DRAWFOUR = 4
+		const val COUNT_HOT_DEATH = 8
+		const val COUNT_DELAYED_BLAST = 4
+		const val COUNT_HARVESTER = 4
+
+		// The only fixed Mystery Draw count. Every other Mystery Draw is worth
+		// whatever number the card beneath it shows, so it has no constant here
+		// and Game works it out at the call site.
+		const val COUNT_YELLOW_69 = 69
 	}
 
 	private var m_generatingPlayer: Player? = null

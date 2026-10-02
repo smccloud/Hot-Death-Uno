@@ -78,17 +78,37 @@
 	<string name="msg_round_score_positive">%1$d + %2$d + %3$d = %4$d</string>
 	<string name="msg_round_score_negative">%1$d - %2$d + %3$d = %4$d</string>
 	
-	<string name="msg_penalty_first_drawfour">%1$s threw a Draw Four - %2$d to %3$s...</string>
-	<string name="msg_penalty_stacked_drawfour">%1$s stacked a Draw Four - %2$d to %3$s...</string>
-	<string name="msg_penalty_first_wild_hd">%1$s threw Hot Death - %2$d to %3$s...</string>
-	<string name="msg_penalty_stacked_wild_hd">%1$s stacked Hot Death - %2$d to %3$s...</string>
-	<string name="msg_penalty_first_wild_db">%1$s threw a Delayed Blast - %2$d to %3$s...</string>
-	<string name="msg_penalty_stacked_wild_db">%1$s stacked a Delayed Blast - %2$d to %3$s...</string>
-	<string name="msg_penalty_first_wild_hos">%1$s threw the Harvester of Sorrows - %2$d to %3$s...</string>
-	<string name="msg_penalty_stacked_wild_hos">%1$s stacked the Harvester of Sorrows - %2$d to %3$s...</string>
-	<string name="msg_penalty_first_wild_mystery">%1$s threw Mystery Draw - %2$d to %3$s...</string>
-	<string name="msg_penalty_stacked_wild_mystery">%1$s stacked Mystery Draw - %2$d to %3$s...</string>
-	<string name="msg_penalty_null_wild_mystery">%1$s threw Mystery Draw on a non-number; same as Wild</string>
+	<!-- Penalty messages name the player who has to act, not the one who threw the
+	     card: "North drew a Draw Four - 4 to South..." asks the reader to do the
+	     subtraction mid-turn. These lead with the victim and the count they owe.
+
+	     Three arguments throughout: victim, cards, thrower. The count is
+	     formatting %2$d and not baked in, so a stacked penalty says the running
+	     total rather than the card's own worth: "8" where a Draw Four says "4".
+
+	     The first and stacked variants stay separate because they say different
+	     things about the same numbers: the first card is from the player named,
+	     the stacked one is from whoever *added* to it. Penalty.addCards overwrites
+	     the generating player on every call, so on a stack that name is the player
+	     who stacked, not whoever started the penalty, which is why the stacked
+	     wording says "stacked by" rather than "from". The player who threw the
+	     first card is not recoverable once a second card lands on it; nothing on
+	     Penalty still holds it. -->
+	<string name="msg_penalty_first_drawfour">%1$s draws %2$d cards (Draw Four from %3$s)...</string>
+	<string name="msg_penalty_stacked_drawfour">%1$s draws %2$d cards (Draw Four stacked by %3$s)...</string>
+	<string name="msg_penalty_first_wild_hd">%1$s draws %2$d cards (Hot Death from %3$s)...</string>
+	<string name="msg_penalty_stacked_wild_hd">%1$s draws %2$d cards (Hot Death stacked by %3$s)...</string>
+	<string name="msg_penalty_first_wild_db">%1$s draws %2$d cards (Delayed Blast from %3$s)...</string>
+	<string name="msg_penalty_stacked_wild_db">%1$s draws %2$d cards (Delayed Blast stacked by %3$s)...</string>
+	<string name="msg_penalty_first_wild_hos">%1$s draws %2$d cards (Harvester of Sorrows from %3$s)...</string>
+	<string name="msg_penalty_stacked_wild_hos">%1$s draws %2$d cards (Harvester of Sorrows stacked by %3$s)...</string>
+	<string name="msg_penalty_first_wild_mystery">%1$s draws %2$d cards (Mystery Draw from %3$s)...</string>
+	<string name="msg_penalty_stacked_wild_mystery">%1$s draws %2$d cards (Mystery Draw stacked by %3$s)...</string>
+	<!-- The one-argument string. A Mystery Draw onto a non-number costs the victim
+	     nothing, and the old wording never said so: it described the thrower and
+	     left the player who has to act to infer that they were fine. This is the
+	     only penalty message without a count, because there is no count. -->
+	<string name="msg_penalty_null_wild_mystery">%1$s draws nothing (Mystery Draw on a non-number)</string>
 	
 	<string name="prompt_deal">How many cards do you want to deal?</string>
 	<string name="prompt_color">Pick a color</string>

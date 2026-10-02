@@ -340,3 +340,53 @@ Version 1.4.8                2026-10-02
    unconditionally would fail it
 
  - test count is 153 unit plus 9 instrumented
+
+
+Version 1.4.9                unreleased
+
+ - penalty messages now name the player who has to act, not the one who threw the
+   card. They read "North threw a Draw Four - 4 to South...", which asks a player
+   mid-turn to work out who owes what from the back half of the sentence. They now
+   read "South draws 4 cards (Draw Four from North)...". All eleven msg_penalty_*
+   strings, not the ten with a count: the eleventh is Mystery Draw onto a
+   non-number, which says so now -- "South draws nothing (Mystery Draw on a
+   non-number)". The old wording described the thrower and never said the victim
+   was fine. Fixes #3
+
+ - the first and stacked variants stay separate, because they say different things
+   about the same numbers. Penalty.addCards overwrites the generating player on
+   every call, so on a stack the name is whoever stacked rather than whoever
+   started it: "South draws 8 cards (Draw Four stacked by North)". That is why the
+   stacked wording says "stacked by" and not "from". Whoever threw the first card
+   is not recoverable once a second lands on it -- nothing on Penalty still holds
+   it, including m_origCard, which is overwritten on the same call
+
+ - the card counts moved out of bare literals at the six addCards call sites in
+   Game.handleSpecialCards into Penalty.COUNT_DRAWFOUR and friends, alongside the
+   PENTYPE_* constants. Nothing tied those six numbers to what the player was told,
+   so a count could change in one place and not the other; and the counts are now
+   read back off the penalty for the message, so the number shown is the running
+   total by construction rather than by agreement. Not on Card deliberately: the
+   same Draw Four costs 4 as a penalty and 50 points as a hand, and both are true
+
+ - the five penalty branches were five copies of the same four lines -- add, test
+   for a stack, pick between two resources, format three arguments -- differing
+   only in the card's worth and its two strings. That is one function now,
+   addCardPenalty. The Delayed Blast branch is why it takes the thrower as an
+   argument: it advances the turn before adding, so its generator is not the player
+   on turn
+
+ - first-or-stacked is now read from the penalty's count before the add. The four
+   fixed cards tested afterwards, as getNumCards() > 4 and so on, which is only
+   equivalent because each adds exactly its own worth every time; Mystery Draw is
+   worth whatever number it covers, so it already had to do it this way and is the
+   reason the other four can now
+
+ - new PenaltyMessageTest, 8 tests. Every message is formatted from the resource
+   rather than written out again, so editing strings.xml -- the whole change here --
+   is what the tests see; a test holding the sentences would have passed anyway.
+   The argument specifiers are checked against the raw template as well as by
+   formatting, because String.format ignores surplus arguments silently and would
+   let a stray %4$s through to throw on a penalty card in front of a player
+
+ - test count is 161 unit plus 9 instrumented

@@ -1720,6 +1720,51 @@ class Game private constructor() : Thread()
 		return count;
 	}
 
+	/**
+	 * Throw a card penalty at the next player and say so.
+	 *
+	 * Five of the six penalty cards did the same four things in five copies: add to
+	 * the penalty, work out whether this was the first card or a card on top of one,
+	 * pick between two message resources, and format three arguments into whichever
+	 * was right. The only thing that varied was the card's worth and its two strings,
+	 * and both are now arguments -- the worth as a `Penalty.COUNT_*`, because the
+	 * numbers were bare literals at each call site and could drift away from what the
+	 * messages claimed.
+	 *
+	 * `stacked` is read from the penalty's count *before* the add. The four cards
+	 * with a fixed worth used to be tested afterwards, as `getNumCards() > 4` and so
+	 * on, which is only equivalent because each of them adds exactly its own worth
+	 * every time -- read the other way round it would be wrong for any card that
+	 * does not. Mystery Draw is worth whatever number it covers, so it was already
+	 * doing this the honest way and is the reason the other four can now be.
+	 *
+	 * The player named as the source is whoever played *this* card. `addCards`
+	 * overwrites the generating player every time, so on a stack that is the player
+	 * who stacked rather than whoever started the penalty, and there is nowhere left
+	 * to read the original from -- `m_origCard` is overwritten on the same call.
+	 * That is why the stacked strings say "stacked by" and not "from".
+	 *
+	 * `from` is a parameter rather than read from `m_currPlayer` because the Delayed
+	 * Blast branch advances the turn before it adds: its generator is the player
+	 * who played the card, not the one now on turn.
+	 */
+	private fun addCardPenalty (from: Player?, numCards: Int, firstMsg: Int, stackedMsg: Int)
+	{
+		val stacked = m_penalty!!.getNumCards() > 0;
+
+		m_penalty!!.addCards (m_currCard, numCards, from, getNextPlayer());
+
+		// The count read back off the penalty rather than taken as `numCards`: on a
+		// stack the player is told the running total, which is what they actually
+		// have to draw.
+		val msg = String.format (
+				getString (if (stacked) stackedMsg else firstMsg),
+				seatToString (m_penalty!!.getVictim()!!.getSeat()),
+				m_penalty!!.getNumCards(),
+				seatToString (m_penalty!!.getGeneratingPlayer()!!.getSeat()));
+		promptUser (msg);
+	}
+
 	fun handleSpecialCards()
 	{
 		val currVal = m_currCard!!.getValue();
@@ -1814,28 +1859,16 @@ class Game private constructor() : Thread()
 		// check the wild draw fours
 		if (currID == Card.ID_WILD_DRAWFOUR)
 		{
-			m_penalty!!.addCards (m_currCard, 4, m_currPlayer, getNextPlayer());
-			var msg: String
-			msg = (if (m_penalty!!.getNumCards() > 4)
-				String.format (getString(R.string.msg_penalty_stacked_drawfour),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat()))
-				else
-				String.format (getString(R.string.msg_penalty_first_drawfour),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat())));
-			promptUser (msg);
+			addCardPenalty (m_currPlayer, Penalty.COUNT_DRAWFOUR,
+					R.string.msg_penalty_first_drawfour,
+					R.string.msg_penalty_stacked_drawfour)
 		}
 
 		else if (currID == Card.ID_WILD_HD)
 		{
-			m_penalty!!.addCards (m_currCard, 8, m_currPlayer, getNextPlayer());
-			var msg: String
-			msg = (if (m_penalty!!.getNumCards() > 8)
-				String.format (getString(R.string.msg_penalty_stacked_wild_hd),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat()))
-				else
-				String.format (getString(R.string.msg_penalty_first_wild_hd),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat())));
-			promptUser (msg);
+			addCardPenalty (m_currPlayer, Penalty.COUNT_HOT_DEATH,
+					R.string.msg_penalty_first_wild_hd,
+					R.string.msg_penalty_stacked_wild_hd)
 		}
 
 		else if (currID == Card.ID_WILD_DB)
@@ -1847,28 +1880,16 @@ class Game private constructor() : Thread()
 				m_currPlayer = nextPlayer();
 			}
 
-			m_penalty!!.addCards (m_currCard, 4, p, getNextPlayer());
-			var msg: String
-			msg = (if (m_penalty!!.getNumCards() > 4)
-				String.format (getString(R.string.msg_penalty_stacked_wild_db),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat()))
-				else
-				String.format (getString(R.string.msg_penalty_first_wild_db),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat())));
-			promptUser (msg);
+			addCardPenalty (p, Penalty.COUNT_DELAYED_BLAST,
+					R.string.msg_penalty_first_wild_db,
+					R.string.msg_penalty_stacked_wild_db)
 		}
 
 		else if (currID == Card.ID_WILD_HOS)
 		{
-			m_penalty!!.addCards (m_currCard, 4, m_currPlayer, getNextPlayer());
-			var msg: String
-			msg = (if (m_penalty!!.getNumCards() > 4)
-				String.format (getString(R.string.msg_penalty_stacked_wild_hos),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat()))
-				else
-				String.format (getString(R.string.msg_penalty_first_wild_hos),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat())));
-			promptUser (msg);
+			addCardPenalty (m_currPlayer, Penalty.COUNT_HARVESTER,
+					R.string.msg_penalty_first_wild_hos,
+					R.string.msg_penalty_stacked_wild_hos)
 		}
 
 		else if (currID == Card.ID_WILD_MYSTERY)
@@ -1876,32 +1897,33 @@ class Game private constructor() : Thread()
 			val prevVal = m_prevCard!!.getValue();
 			val prevID  = m_prevCard!!.getID();
 
-			val prevPenalty = m_penalty!!.getNumCards();
-
 			if (prevID == Card.ID_YELLOW_69)
 			{
-				m_penalty!!.addCards(m_currCard, 69, m_currPlayer, getNextPlayer());
+				addCardPenalty (m_currPlayer, Penalty.COUNT_YELLOW_69,
+						R.string.msg_penalty_first_wild_mystery,
+						R.string.msg_penalty_stacked_wild_mystery)
 			}
 			else if (prevVal > 0 && prevVal < 10)
 			{
-				m_penalty!!.addCards(m_currCard, prevVal, m_currPlayer, getNextPlayer());
+				addCardPenalty (m_currPlayer, prevVal,
+						R.string.msg_penalty_first_wild_mystery,
+						R.string.msg_penalty_stacked_wild_mystery)
 			}
 			else
 			{
-				// mystery thrown on top of a non-numbered card -- just the same as a wild card
+				// Mystery thrown on top of a non-numbered card -- just the same as a
+				// wild card, so no penalty is added and the victim draws nothing.
+				//
+				// getNextPlayer() is called here for the message alone. It was
+				// already being called on every branch that adds a penalty, to name
+				// the victim, and it only walks the seating order without touching
+				// turn state -- the code that moves m_currPlayer is the two lines
+				// above, not this call.
 				val msg = String.format (getString(R.string.msg_penalty_null_wild_mystery),
-						seatToString(m_currPlayer!!.getSeat()));
+						seatToString(getNextPlayer().getSeat()));
 				promptUser (msg);
 				return;
 			}
-			var msg: String
-			msg = (if (prevPenalty > 0)
-				String.format (getString(R.string.msg_penalty_stacked_wild_mystery),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat()))
-				else
-				String.format (getString(R.string.msg_penalty_first_wild_mystery),
-						seatToString(m_penalty!!.getGeneratingPlayer()!!.getSeat()), m_penalty!!.getNumCards(), seatToString(m_penalty!!.getVictim()!!.getSeat())));
-			promptUser (msg);
 		}
 
 		// check other special cards

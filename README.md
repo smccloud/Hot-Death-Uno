@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.8 (`versionCode` 1004008) |
+| Current version | 1.4.9 (`versionCode` 1004009), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -349,7 +349,7 @@ and drifting.
     ├── README.md                 original project blurb
     ├── artwork/                  GIMP source for the store feature image
     └── app/
-        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004008
+        ├── build.gradle          compileSdk 36, minSdk 34, versionCode 1004009
         ├── proguard-rules.pro    R8 rules (release is minified)
         └── src/
             ├── main/
@@ -576,7 +576,6 @@ Three behavioral changes came with the retarget:
 
 Tracked as GitHub issues, so they have somewhere to be discussed and closed:
 
-- Clearer in-game messaging for penalties ("South draws, takes penalty") — [#3](https://github.com/smccloud/Hot-Death-Uno/issues/3)
 - A toast when a matching card is played, since it is otherwise hard to tell what
   happened on a small table — [#4](https://github.com/smccloud/Hot-Death-Uno/issues/4)
 - An optional novice mode that taps to advance after each card played — [#5](https://github.com/smccloud/Hot-Death-Uno/issues/5)
@@ -623,14 +622,14 @@ devices, then on Android, and has been playing it ever since.
 
 This Android implementation was written by **priebe** (runtsoft.com) — first for
 Pocket PC in the early 2000s, then ported to Android. Version 1.0.0 was released in
-May 2011; the current source tree is version 1.4.8, migrated to a modern Gradle /
+May 2011; the current source tree is version 1.4.9, migrated to a modern Gradle /
 AGP 8.11.1 toolchain.
 
 Versioning is `MAJOR.MINOR.PATCH`, with the patch a plain release counter within the
 minor line. `versionCode` is computed from `versionName` in `app/build.gradle` rather
 than typed next to it, so the two cannot drift apart: the encoding is
 `major * 1000000 + minor * 1000 + patch`, unchanged from every published release, so
-no `versionCode` has ever had to change retroactively. 1.4.8 is 1004008.
+no `versionCode` has ever had to change retroactively. 1.4.9 is 1004009.
 
 The one hard constraint is that `versionCode` must strictly increase on every release.
 Android refuses to install a build whose code is not greater than the installed one,

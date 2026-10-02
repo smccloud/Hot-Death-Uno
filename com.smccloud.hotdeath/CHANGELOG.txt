@@ -277,7 +277,7 @@ Version 1.4.7                2026-10-01
       
 
 
-Version 1.4.8                unreleased
+Version 1.4.8                2026-10-02
 
  - a malformed save is now rejected at the point it is read, rather than
    crashing some way into play. Game's resuming constructor caught JSONException

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="103" height="160" viewBox="0 0 103 160">
+<rect x="0.5" y="0.5" width="102" height="159" rx="7" fill="#E6880B"/>
+<rect x="17" y="31" width="66" height="96" rx="6" fill="#DCDBD6"/>
+  <circle cx="51.5" cy="77.0" r="19.0" fill="#141414"/>
+  <circle cx="51.5" cy="77.0" r="19.0" fill="none" stroke="#F2EFE8" stroke-width="2.4"/>
+  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle" stroke="#1A1A1A" stroke-width="0.9" paint-order="stroke" stroke-linejoin="round">M.A.D</text>
+  <text x="51.50" y="87.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="24" font-weight="bold" fill="#E6880B" text-anchor="middle">1</text>
+  <text x="10.81" y="18.40" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="13" font-weight="bold" fill="#DCDBD6" text-anchor="middle">1</text>
+  <text x="92.19" y="141.60" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="13" font-weight="bold" fill="#DCDBD6" text-anchor="middle" transform="rotate(180 92.19 141.60)">1</text>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="103" height="160" viewBox="0 0 103 160">
+<rect x="0.5" y="0.5" width="102" height="159" rx="7" fill="#262529"/>
+<rect x="3.5" y="3.5" width="96" height="153" rx="5" fill="none" stroke="#D7D3CB" stroke-width="2.6"/>
+  <g transform="rotate(-45 51.5 80.0)">
+    <rect x="28.5" y="63.0" width="46" height="34" rx="7" fill="#FF0000" stroke="#FFC800" stroke-width="2.4"/>
+  <text x="51.50" y="88.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="20" font-weight="bold" fill="#FFC800" text-anchor="middle">HDU</text>
+  </g>
+</svg>

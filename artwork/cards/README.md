@@ -117,12 +117,48 @@ the one place the set knowingly differs from the art it was generated from.
 
 ## If these get used
 
-Android cannot consume SVG directly — `BitmapFactory.decodeResource` will not read
-one, and `res/drawable` has no SVG support. So these are either **masters to
-rasterise** per density bucket at build time, or they need converting to
-`androidx.vectordrawable` XML. Either way that is a build step this repository does
-not currently have, and it is the reason the three-ratio problem in issue #9 is
-worth solving at the generator rather than in the art.
+Android cannot consume SVG directly -- `BitmapFactory.decodeResource` will not read
+one, and `res/drawable` has no SVG support. So `render_card_pngs.py` does the
+rasterisation:
 
-`card_badge` has no SVG here. It is drawn on top of a hand rather than being a card
-face, and it is 40 × 40 rather than the card's aspect ratio.
+    python3 artwork/cards/render_card_pngs.py             # -> artwork/cards/png/
+    python3 artwork/cards/render_card_pngs.py --install   # ...and copy into res/
+
+**It does not write into `res/` by default.** The art already there is the shipped
+set, hand-drawn years ago, and overwriting it should be a deliberate act. `--install`
+is that act.
+
+Each face is rendered at 4x and downsampled with Lanczos before being quantised.
+Rendering straight to 52x80 gives visibly worse corner numerals, because the labels
+are small text and a rasteriser asked for one size will hit it exactly.
+
+Output is quantised to 128 colours to match the shipped budget, via ImageMagick's
+PNG8 -- `pngquant`, which is what the shipped set actually went through, is not
+installed here. Close but not identical, so treat the sizes below as indicative.
+
+## The size result
+
+85 faces x 5 buckets, against the shipped `card_*.png`:
+
+| Bucket | Size | Shipped | Generated | Delta |
+|---|---|---|---|---|
+| `drawable-mdpi` | 52x80 | 334 KB | 81 KB | -75.7% |
+| `drawable-hdpi` | 77x120 | 653 KB | 113 KB | -82.6% |
+| `drawable-xlarge-mdpi` | 77x120 | 652 KB | 113 KB | -82.5% |
+| `drawable-xhdpi` | 103x160 | 1099 KB | 143 KB | -86.9% |
+| `drawable-xlarge-hdpi` | 103x160 | 1101 KB | 143 KB | -86.9% |
+
+That is the argument issue #9 was making, measured. The shipped art is painted and
+dithered, and quantisation noise in a fine grain is exactly what reads as cheap --
+which is why it needed a good quantiser to survive `pngquant 128`. Flat vector art
+quantises to very few effective colours, so the same palette depth costs a quarter
+of the bytes.
+
+It is also why the three-ratio problem is worth solving here rather than in the art.
+52x80 is 0.650 and 77x120 is 0.6417, under 2% apart and enough to make a naive
+resize wrong at the corners. Rendered from a vector at each bucket's own size, the
+question does not arise.
+
+`artwork/cards/png/` is gitignored. The SVGs beside it are the source, and
+committing 425 generated PNGs on top of them would duplicate the source and put
+every one of them in the diff when a single face changes.

@@ -78,3 +78,9 @@ desktop.ini
 *.rej
 *.swp
 *~
+
+# Rasterised card art: build output from artwork/cards/render_card_pngs.py. The
+# SVGs beside it are the checked-in source, so committing 425 generated PNGs on top
+# of them would duplicate the source and put every one of them in the diff when a
+# face changes.
+artwork/cards/png/

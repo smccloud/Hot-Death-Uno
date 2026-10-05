@@ -65,19 +65,44 @@ hot-death symbol, this is a placeholder.
 part. Word positions are in `WORD_Y` and the per-card `word_slot`, and no label has
 been confirmed to sit where the original puts it.
 
-## What has not been verified at all
+## What has been rendered
 
-**Nothing here has been rendered.** There is no SVG rasteriser on this machine —
-no `rsvg-convert`, no Inkscape, no ImageMagick, no `cairosvg`, no Pillow — so
-every claim above is about structure and colour, and **not one of these files has
-been looked at**. What was checked: all 85 parse as XML; all declare
-`viewBox="0 0 103 160"`; every face carries the measured panel box and a frame
-colour drawn from the sampled set; the file set matches `initCards()` exactly in
-both directions with no orphans, the only PNG without an SVG being `card_badge`,
-which is not a card face.
+All 85, through `rsvg-convert` at 103 x 160 and again at 412 x 640, with no
+failures, and every one has real content rather than being a flat fill.
 
-Rendering them is the first thing to do with them.
+That pass found five things that no amount of reading the XML would have:
 
+- **Every label rendered hollow.** `paint-order="stroke"` is the obvious way to
+  get pale text with a dark outline and **librsvg has never implemented it**, so
+  the stroke went on after the fill and each word came out as an outline with no
+  colour inside it. Now drawn in two passes -- a fattened stroke copy behind, the
+  fill on top -- which is renderer-independent.
+- **The wild's bottom-right corner word hung off the card.** It was anchored
+  `end` at the rotation pivot, so it extended one way before the 180-degree turn
+  and the other way after it. Both corners now share an anchor and a pivot.
+- **The arrows were wrong on all twelve action variants.** They were suit-coloured
+  and always four. The originals disagree with each other: the Spreader has four
+  *red* arrows, the Double Skip two *gold*, the Reverse Skip two *green*.
+- **MAD's label was white.** It is red. So is its target ring too thick and its
+  disc too small, and its label is `M·A·D` with middots rather than full stops.
+- **The Holy Defender had no O.** Its face is crown, HOLY, a gold O, DEFENDER,
+  and the first version had the crown sitting on top of the word.
+
+Note that ImageMagick's own SVG path renders the same files *incorrectly* -- the
+pale disc behind the wild's wheel simply does not appear -- so use `rsvg-convert`
+rather than `convert` if you re-render these.
+
+## What is still unverified
+
+**Label placement** was read off the reference bitmaps by eye and remains the
+weakest part. Word baselines are in `WORD_Y` and each card's `word_slot`; the
+four action variants and the specials have been eyeballed against their originals
+at 4x, but nobody has compared all 85 side by side.
+
+**No pixel comparison was done.** ImageMagick and librsvg could do one -- render,
+downsample to 103 x 160, and diff against the source PNG -- but a diff against a
+`pngquant`-ed 128-colour original with a substituted font measures the font, not
+the layout, so it would be a misleading number.
 ## The 69 discrepancy
 
 `card_yellow_69.png` shows a big **6**, not a 69 — `CardDeck` gives that card

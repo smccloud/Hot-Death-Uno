@@ -93,49 +93,77 @@ def panel():
             % (x, y, w, h, PANEL_R, PANEL_BONE))
 
 
-WORD_Y = {'top': 52, 'bottom': 112, 'mid': 84, 'low': 100}
+WORD_Y = {'top': 55, 'bottom': 112, 'mid': 84, 'low': 100}
 
 
-def outlined(x, y, s, size, fill, stroke='#1A1A1A', width=0.9):
-    """The word-over-the-panel style: pale text with a dark outline."""
-    return txt(x, y, s, size, fill, weight='bold',
-               extra=' stroke="%s" stroke-width="%s" paint-order="stroke"'
-                     ' stroke-linejoin="round"' % (stroke, width))
+def outlined(x, y, s, size, fill, stroke='#1A1A1A', width=2.2):
+    """Pale text with a dark outline, drawn in two passes.
+
+    `paint-order="stroke"` is the obvious way to do this and it does not work:
+    librsvg has never implemented it, so the stroke goes on *after* the fill and
+    every label came out hollow -- an outlined letter with no colour inside it.
+    Rendering the stroke first as a fattened copy and then the fill on top is
+    renderer-independent, at the cost of one extra element per label.
+    """
+    halo = txt(x, y, s, size, stroke, weight='bold',
+               extra=' stroke="%s" stroke-width="%s" stroke-linejoin="round"'
+                     % (stroke, width))
+    return halo + txt(x, y, s, size, fill, weight='bold')
 
 
 # --------------------------------------------------------------------------
 # Motifs. Each is a rough geometric stand-in, NOT a trace of the original.
 # --------------------------------------------------------------------------
-def motif_arrows(colour, cy, n=4, r=15):
-    """The outward arrows on the Spreader / Skip variants."""
+def motif_arrows(colour, cy, n=4, r=17):
+    """Outward arrows behind the glyph.
+
+    Count and colour are per card, because the originals disagree: the Spreader
+    has four red arrows, the Double Skip two gold ones and the Reverse Skip two
+    green ones. A single suit-coloured set of four was wrong on all three.
+    """
     import math
     out = []
     cx = W / 2.0
+    # Two arrows sit on the horizontal, four on the diagonals.
+    start = 0.0 if n == 2 else 45.0
     for i in range(n):
-        a = math.radians(45 + i * (360.0 / n))
-        ax, ay = cx + r * math.cos(a), cy + r * math.sin(a)
-        rot = math.degrees(a) + 90
-        out.append('  <path d="M %.2f %.2f L %.2f %.2f L %.2f %.2f Z" fill="%s"'
-                   ' transform="rotate(%.1f %.2f %.2f)"/>\n'
-                   % (ax - 7, ay + 2, ax + 7, ay + 2, ax, ay - 7, colour, rot, ax, ay))
+        a = math.radians(start + i * (360.0 / n))
+        ux, uy = math.cos(a), math.sin(a)
+        px, py = -uy, ux
+        bx, by = cx + r * ux, cy + r * uy          # tip
+        sx, sy = cx + (r - 9) * ux, cy + (r - 9) * uy
+        out.append(
+            '  <path d="M %.2f %.2f L %.2f %.2f L %.2f %.2f L %.2f %.2f Z" fill="%s"/>\n'
+            % (bx, by,
+               sx + 4.2 * px, sy + 4.2 * py,
+               sx - 4.2 * px, sy - 4.2 * py,
+               sx, sy, colour))
     return out
 
 
 def motif_crown(gold, y):
-    """The Holy Defender's crown."""
-    x0, x1 = W / 2.0 - 21, W / 2.0 + 21
-    return ('  <path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f L %.1f %.1f L %.1f %.1f Z"'
+    """The Holy Defender's crown: three points over a band.
+
+    The first attempt was two flat triangles, which read as a paper hat rather
+    than a crown at card size.
+    """
+    cx = W / 2.0
+    half, base = 20.0, 11.0
+    body = ('  <path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f L %.1f %.1f L %.1f %.1f Z"'
             ' fill="%s"/>\n'
-            % (x0, y + 12, x0, y, W / 2.0 - 10, y + 9, W / 2.0, y - 4,
-               W / 2.0 + 10, y + 9, gold))
+            % (cx - half, y + base, cx - half, y + 2, cx - 10, y + 7,
+               cx, y - 3, cx + 10, y + 7, gold))
+    body += ('  <rect x="%.1f" y="%.1f" width="%.1f" height="3.4" rx="1.2"'
+             ' fill="%s"/>\n' % (cx - half, y + base, half * 2, gold))
+    return body
 
 
 def motif_target(r, cy):
-    """The MAD card's bullseye: dark disc, pale ring."""
+    """The MAD card's bullseye: dark disc inside a thin pale ring."""
     cx = W / 2.0
     return ('  <circle cx="%.1f" cy="%.1f" r="%.1f" fill="#141414"/>\n'
             '  <circle cx="%.1f" cy="%.1f" r="%.1f" fill="none" stroke="#F2EFE8"'
-            ' stroke-width="2.4"/>\n' % (cx, cy, r, cx, cy, r))
+            ' stroke-width="1.3"/>\n' % (cx, cy, r, cx, cy, r))
 
 
 def motif_pinwheel(cy, r=20):
@@ -171,14 +199,22 @@ FACE = {
     'card_green_d_spreader':  dict(glyph='D', words=('Spreader', None), motif='arrows'),
     'card_blue_d_spreader':   dict(glyph='D', words=('Spreader', None), motif='arrows'),
     'card_yellow_d_spreader': dict(glyph='D', words=('Spreader', None), motif='arrows'),
-    'card_red_s_double':      dict(glyph='S', words=('Double', 'Skip'), motif='arrows'),
-    'card_green_s_double':    dict(glyph='S', words=('Double', 'Skip'), motif='arrows'),
-    'card_blue_s_double':     dict(glyph='S', words=('Double', 'Skip'), motif='arrows'),
-    'card_yellow_s_double':   dict(glyph='S', words=('Double', 'Skip'), motif='arrows'),
-    'card_red_r_skip':        dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows'),
-    'card_green_r_skip':      dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows'),
-    'card_blue_r_skip':       dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows'),
-    'card_yellow_r_skip':     dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows'),
+    'card_red_s_double':      dict(glyph='S', words=('Double', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#E6880B'),
+    'card_green_s_double':    dict(glyph='S', words=('Double', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#E6880B'),
+    'card_blue_s_double':     dict(glyph='S', words=('Double', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#E6880B'),
+    'card_yellow_s_double':   dict(glyph='S', words=('Double', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#E6880B'),
+    'card_red_r_skip':        dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#028139'),
+    'card_green_r_skip':      dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#028139'),
+    'card_blue_r_skip':       dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#028139'),
+    'card_yellow_r_skip':     dict(glyph='R', words=('Reverse', 'Skip'), motif='arrows',
+                                   arrows=2, arrow_colour='#028139'),
 
     # -- wilds. The centre wheel with "Wild" over it; the corner word names the
     #    variant, which is what the original faces do.
@@ -191,8 +227,8 @@ FACE = {
 
     # -- the bastard cards and the specials. Word on the face, and the short
     #    symbol repeated in the corners.
-    'card_red_0_hd':       dict(glyph=None, corners='0', words=('Holy', 'Defender'),
-                               motif='crown'),
+    'card_red_0_hd':       dict(glyph='O', corners='0', words=('Holy', 'Defender'),
+                               motif='crown', glyph_fill=GOLD, glyph_size=34),
     'card_red_2_glasnost': dict(glyph=None, corners='2', words=('Glasnost', None)),
     'card_red_5_magic':    dict(glyph='5', corners='5'),
     'card_green_0_quitter': dict(glyph='0', corners='0', words=('Quitter', None)),
@@ -204,8 +240,9 @@ FACE = {
     'card_blue_2_shield':  dict(glyph='2', corners='2', words=('Shield', None)),
     'card_yellow_0_shitter':   dict(glyph='0', corners='0', words=('Shitter', 'Big Bro')),
     'card_yellow_0_shitter_ff': dict(glyph='0', corners='0', words=('Big Brother', None)),
-    'card_yellow_1_mad':   dict(glyph='1', corners='1', words=(None, 'M.A.D'),
-                               motif='target', word_slot='bottom'),
+    'card_yellow_1_mad':   dict(glyph='1', corners='1', words=(None, 'M·A·D'),
+                               motif='target', word_slot='bottom',
+                               word_fill='#C70E26'),
     # The deck gives the 69 a value of 6, and the existing bitmap duly shows a 6.
     # That is an artefact of the original art, not the card's identity, so this
     # says 69. See README.md.
@@ -296,8 +333,12 @@ def draw_svg(drawable, spec):
     corners = art.get('corners', glyph)
 
     if is_wild:
+        # Same anchor and same pivot for both, or the rotated copy lands off the
+        # card: text anchored 'end' at the pivot extends leftwards before the
+        # rotation and rightwards after it, which is how the bottom-right corner
+        # ended up clipped past the edge in the first render.
         body.append(txt(8, 17, corners, 9, PANEL_BONE, anchor='start', weight='bold'))
-        body.append(txt(W - 8, H - 9, corners, 9, PANEL_BONE, anchor='end',
+        body.append(txt(W - 8, H - 9, corners, 9, PANEL_BONE, anchor='start',
                         weight='bold',
                         transform='rotate(180 %.1f %.1f)' % (W - 8, H - 9)))
         body.extend(motif_pinwheel(cy))
@@ -309,31 +350,40 @@ def draw_svg(drawable, spec):
 
     # -- motif behind the glyph
     if art.get('motif') == 'arrows':
-        body.extend(motif_arrows(SUIT[suit], PANEL[1] + PANEL[3] / 2.0))
+        body.extend(motif_arrows(art.get('arrow_colour', '#C70E26'),
+                                 PANEL[1] + PANEL[3] / 2.0,
+                                 art.get('arrows', 4)))
     elif art.get('motif') == 'crown':
-        body.append(motif_crown(GOLD, 34))
+        body.append(motif_crown(GOLD, 31))
     elif art.get('motif') == 'target':
-        body.append(motif_target(19, PANEL[1] + PANEL[3] / 2.0 - 2))
+        body.append(motif_target(22, PANEL[1] + PANEL[3] / 2.0 - 4))
 
     # -- the words over the panel
     top, bottom = art.get('words', (None, None))
     slot = art.get('word_slot', 'split')
+    fill = art.get('word_fill', '#FFFFFF')
     if top:
         y = WORD_Y['top'] if slot == 'split' else WORD_Y[slot]
-        body.append(outlined(W / 2.0, y, top, 11, '#FFFFFF'))
+        body.append(outlined(W / 2.0, y, top, 11, fill))
     if bottom:
         y = WORD_Y['bottom'] if slot == 'split' else WORD_Y[slot]
-        body.append(outlined(W / 2.0, y, bottom, 11, '#FFFFFF'))
+        body.append(outlined(W / 2.0, y, bottom, 11, fill))
 
     # -- the big glyph
     if glyph:
-        if art.get('motif') == 'target':
-            body.append(txt(W / 2.0, PANEL[1] + PANEL[3] / 2.0 + 8, glyph, 24,
-                            SUIT[suit]))
+        gcolour = art.get('glyph_fill', SUIT[suit])
+        gsize = art.get('glyph_size')
+        if gsize is None:
+            gsize = 24 if art.get('motif') == 'target' else (26 if top or bottom else 38)
+        if art.get('motif') == 'crown':
+            y = 92
+        elif art.get('motif') == 'target':
+            y = PANEL[1] + PANEL[3] / 2.0 + 4
         elif top or bottom:
-            body.append(txt(W / 2.0, 92, glyph, 26, SUIT[suit]))
+            y = 92
         else:
-            body.append(txt(W / 2.0, 92, glyph, 38, SUIT[suit]))
+            y = 92
+        body.append(txt(W / 2.0, y, glyph, gsize, gcolour))
 
     body.extend(corner_glyphs(corners, PANEL_BONE))
     return assemble(body)

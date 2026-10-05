@@ -2,7 +2,7 @@
 <rect x="0.5" y="0.5" width="102" height="159" rx="7" fill="#262529"/>
   <circle cx="51.5" cy="80.0" r="23.0" fill="#DCDBD6"/>
   <text x="8.00" y="17.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="9" font-weight="bold" fill="#DCDBD6" text-anchor="start">Draw 4</text>
-  <text x="95.00" y="151.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="9" font-weight="bold" fill="#DCDBD6" text-anchor="end" transform="rotate(180 95.0 151.0)">Draw 4</text>
+  <text x="95.00" y="151.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="9" font-weight="bold" fill="#DCDBD6" text-anchor="start" transform="rotate(180 95.0 151.0)">Draw 4</text>
   <path d="M 51.50 80.00 L 51.50 60.00 A 20.0 20.0 0 0 1 71.50 80.00 Z" fill="#C70E26"/>
   <path d="M 51.50 80.00 L 71.50 80.00 A 20.0 20.0 0 0 1 51.50 100.00 Z" fill="#028139"/>
   <path d="M 51.50 80.00 L 51.50 100.00 A 20.0 20.0 0 0 1 31.50 80.00 Z" fill="#044FA1"/>

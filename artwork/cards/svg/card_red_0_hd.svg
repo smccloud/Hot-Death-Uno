@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="103" height="160" viewBox="0 0 103 160">
 <rect x="0.5" y="0.5" width="102" height="159" rx="7" fill="#C70E26"/>
 <rect x="17" y="31" width="66" height="96" rx="6" fill="#DCDBD6"/>
-  <path d="M 30.5 46.0 L 30.5 34.0 L 41.5 43.0 L 51.5 30.0 L 61.5 43.0 Z" fill="#FFC800"/>
-  <text x="51.50" y="52.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle" stroke="#1A1A1A" stroke-width="0.9" paint-order="stroke" stroke-linejoin="round">Holy</text>
-  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle" stroke="#1A1A1A" stroke-width="0.9" paint-order="stroke" stroke-linejoin="round">Defender</text>
+  <path d="M 31.5 42.0 L 31.5 33.0 L 41.5 38.0 L 51.5 28.0 L 61.5 38.0 Z" fill="#FFC800"/>
+  <rect x="31.5" y="42.0" width="40.0" height="3.4" rx="1.2" fill="#FFC800"/>
+  <text x="51.50" y="55.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#1A1A1A" text-anchor="middle" stroke="#1A1A1A" stroke-width="2.2" stroke-linejoin="round">Holy</text>
+  <text x="51.50" y="55.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Holy</text>
+  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#1A1A1A" text-anchor="middle" stroke="#1A1A1A" stroke-width="2.2" stroke-linejoin="round">Defender</text>
+  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Defender</text>
+  <text x="51.50" y="92.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="34" font-weight="bold" fill="#FFC800" text-anchor="middle">O</text>
   <text x="10.81" y="18.40" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="13" font-weight="bold" fill="#DCDBD6" text-anchor="middle">0</text>
   <text x="92.19" y="141.60" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="13" font-weight="bold" fill="#DCDBD6" text-anchor="middle" transform="rotate(180 92.19 141.60)">0</text>
 </svg>

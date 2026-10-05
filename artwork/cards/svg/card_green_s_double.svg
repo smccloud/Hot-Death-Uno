@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="103" height="160" viewBox="0 0 103 160">
 <rect x="0.5" y="0.5" width="102" height="159" rx="7" fill="#028139"/>
 <rect x="17" y="31" width="66" height="96" rx="6" fill="#DCDBD6"/>
-  <path d="M 55.11 91.61 L 69.11 91.61 L 62.11 82.61 Z" fill="#028139" transform="rotate(135.0 62.11 89.61)"/>
-  <path d="M 33.89 91.61 L 47.89 91.61 L 40.89 82.61 Z" fill="#028139" transform="rotate(225.0 40.89 89.61)"/>
-  <path d="M 33.89 70.39 L 47.89 70.39 L 40.89 61.39 Z" fill="#028139" transform="rotate(315.0 40.89 68.39)"/>
-  <path d="M 55.11 70.39 L 69.11 70.39 L 62.11 61.39 Z" fill="#028139" transform="rotate(405.0 62.11 68.39)"/>
-  <text x="51.50" y="52.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle" stroke="#1A1A1A" stroke-width="0.9" paint-order="stroke" stroke-linejoin="round">Double</text>
-  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle" stroke="#1A1A1A" stroke-width="0.9" paint-order="stroke" stroke-linejoin="round">Skip</text>
+  <path d="M 68.50 79.00 L 59.50 83.20 L 59.50 74.80 L 59.50 79.00 Z" fill="#E6880B"/>
+  <path d="M 34.50 79.00 L 43.50 74.80 L 43.50 83.20 L 43.50 79.00 Z" fill="#E6880B"/>
+  <text x="51.50" y="55.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#1A1A1A" text-anchor="middle" stroke="#1A1A1A" stroke-width="2.2" stroke-linejoin="round">Double</text>
+  <text x="51.50" y="55.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Double</text>
+  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#1A1A1A" text-anchor="middle" stroke="#1A1A1A" stroke-width="2.2" stroke-linejoin="round">Skip</text>
+  <text x="51.50" y="112.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Skip</text>
   <text x="51.50" y="92.00" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="26" font-weight="bold" fill="#028139" text-anchor="middle">S</text>
   <text x="10.81" y="18.40" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="13" font-weight="bold" fill="#DCDBD6" text-anchor="middle">S</text>
   <text x="92.19" y="141.60" font-family="'DejaVu Sans', Verdana, Geneva, sans-serif" font-size="13" font-weight="bold" fill="#DCDBD6" text-anchor="middle" transform="rotate(180 92.19 141.60)">S</text>

@@ -757,6 +757,16 @@ Version 1.4.15               2026-10-02
 
 Version 1.4.16               unreleased
 
+ - every card face and card back is redrawn. e464a7c through d405f31 generated
+   the faces as SVG from the card table and the existing bitmaps, rendered them,
+   fixed the five defects that rendering exposed and rasterised the result over
+   res/drawable-*. Visible in the old screenshots: the back of a card used to
+   clip the Hot Death logo to an orange sliver along the top edge, and a face-up
+   card drew its label across the big rank with the digit clipped by the card
+   edge. A back now carries the whole logo and a face is a rank with a small
+   index in each corner, labelled or not. Nothing about the rules changed, and
+   no code outside res/drawable-* did
+
  - 106 deprecation warnings off the build, and one of them was not cosmetic.
    Every one of these is an Android API deprecated in 29, 30 or 33 that the app
    was still calling, and the compiler had been saying so on every build since

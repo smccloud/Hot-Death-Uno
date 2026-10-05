@@ -755,7 +755,7 @@ Version 1.4.15               2026-10-02
  - test count is 221 unit plus 9 instrumented
 
 
-Version 1.4.16               unreleased
+Version 1.4.16               2026-10-05
 
  - every card face and card back is redrawn. e464a7c through d405f31 generated
    the faces as SVG from the card table and the existing bitmaps, rendered them,

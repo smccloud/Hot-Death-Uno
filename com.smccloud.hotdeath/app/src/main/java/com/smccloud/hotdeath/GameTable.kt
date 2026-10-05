@@ -16,6 +16,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.content.Context
 import java.util.HashMap
+import kotlin.math.max
+import kotlin.math.min
 
 import android.graphics.*
 import android.content.res.Resources
@@ -35,6 +37,51 @@ import android.content.res.Resources
 // not.
 class GameTable private constructor(context: Context) : View(context)
 {
+	/**
+	 * Which arrangement the table is laid out in.
+	 *
+	 * PORTRAIT and LANDSCAPE are two placements of the same thing. NEAR_SQUARE
+	 * is the case a book-style foldable is in when it is unfolded: the screen is
+	 * nearly square in *either* orientation -- 2208x1840 one way and 1840x2208
+	 * the other, ratios of 1.20 and 0.84 -- so neither of the other two names
+	 * describes it. It is placed like LANDSCAPE, and the third name exists
+	 * because the decision is the thing under test and because it is where the
+	 * hinge work in #13 will land: a fold is only worth knowing about once the
+	 * window is near enough square that the crease is in the middle of it.
+	 */
+	internal enum class Arrangement
+	{
+		PORTRAIT,
+		LANDSCAPE,
+		NEAR_SQUARE
+	}
+
+	/**
+	 * How far from square a window has to be before it is one or the other.
+	 *
+	 * Width against height, both multiplied by 10, so the band is 10% either
+	 * way and the arithmetic stays in Int. Outside it, the wider-than-tall
+	 * window is LANDSCAPE; inside it, NEAR_SQUARE.
+	 *
+	 * This replaces `if (h < 4.5 * m_cardHeight)`, which compared the window
+	 * against a *card bitmap's* height -- a number that comes from the resource
+	 * density and is 80 at mdpi, 120 at hdpi and 160 at xhdpi. So the threshold
+	 * was 360, 540 or 720 pixels of height, and no phone or foldable window is
+	 * under any of them: the landscape branch could not fire for any real
+	 * device, in either orientation, at any density in `res/`. Only genuinely
+	 * small windows reached it -- 900x700 and below -- which is the one case
+	 * where a landscape arrangement is least useful.
+	 */
+
+	/** Aspect ratio of the window decides, and only the window. */
+	private fun arrangementFor (w: Int, h: Int): Arrangement
+	{
+		// w/h greater than 5/4 is wider than tall, less than 4/5 is taller than
+		// wide, and the quarter either side of square in between is NEAR_SQUARE.
+		if (w * NEAR_SQUARE_BAND > h * SQUARE_BAND) return Arrangement.LANDSCAPE
+		if (h * NEAR_SQUARE_BAND > w * SQUARE_BAND) return Arrangement.PORTRAIT
+		return Arrangement.NEAR_SQUARE
+	}
 	private var m_cardoffset = IntArray(4)
 	private var m_currentDrag = IntArray(4)
 
@@ -80,6 +127,33 @@ class GameTable private constructor(context: Context) : View(context)
 	*/
 	private var m_cardWidth = 0
 	private var m_cardHeight = 0
+
+	/**
+	 * The card bitmaps as they were decoded, at the device's density, and never
+	 * touched since.
+	 *
+	 * The drawn copies in [m_imageLookup] are made from these every time the
+	 * window changes shape, rather than from the previous drawn copies. Scaling
+	 * a scaled bitmap resamples it, so scaling in place would make a fold
+	 * visibly soften the cards, and a second fold would soften them again.
+	 */
+	private val m_imageSource = HashMap<Int, Bitmap>()
+	private lateinit var m_bmpCardBackSource: Bitmap
+
+	/** 1f unless a window-relative bound moved the card size; see applyCardScale. */
+	private var m_cardScale = 1f
+
+	/**
+	 * Which of the arrangements below [onSizeChanged] chose.
+	 *
+	 * Recorded rather than inferred, because "near-square" is a case that has to
+	 * be visible to be tested: the previous code had two branches and the test
+	 * could only tell them apart by the top margin, which is a comparison against
+	 * a card height. Read here instead. GameTableLayoutTest asserts one per
+	 * geometry.
+	 */
+	internal var m_arrangement = Arrangement.PORTRAIT
+		private set
 
 	private var m_emoticonWidth = 0
 	private var m_emoticonHeight = 0
@@ -250,26 +324,33 @@ class GameTable private constructor(context: Context) : View(context)
 
 	override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int)
 	{
+		// Before anything reads m_cardWidth: everything below is an offset from
+		// it. A window whose shape asks for different cards gets them here, and
+		// a phone gets the density's own size back without touching a bitmap.
+		applyCardScale (w, h)
+
+		m_arrangement = arrangementFor (w, h)
+
 		m_leftMargin = m_cardWidth / 4
 		m_rightMargin = m_cardWidth / 4
 		m_topMargin = m_cardHeight / 3
 		m_bottomMargin = m_cardHeight / 3 + m_bottomMarginExternal
 
-		if (h < 4.5 * m_cardHeight)
-		{
-			// probably landscape on a small device...
-			m_topMargin = m_cardHeight / 4
-			m_bottomMargin = m_cardHeight / 4 + m_bottomMarginExternal
-			m_ptDrawPile = Point (w / 2 - 5 * m_cardWidth / 4, h / 2 - m_cardHeight / 2)
-			m_ptDiscardPile = Point (w / 2 + m_cardWidth / 4, h / 2 - m_cardHeight / 2)
-			m_ptDirColor = Point (m_ptDiscardPile!!.x + 2 * m_cardWidth + m_bmpDirColorCCW.width / 4 - m_bmpPlayerIndicator[0][0]!!.width, h / 2 - m_bmpDirColorCCW.width / 2)
-		}
-		else
+		if (m_arrangement == Arrangement.PORTRAIT)
 		{
 			// portrait
 			m_ptDrawPile = Point (w / 2 - 5 * m_cardWidth / 4, h / 2 - m_cardHeight)
 			m_ptDiscardPile = Point (w / 2 + m_cardWidth / 4, h / 2 - m_cardHeight)
 			m_ptDirColor = Point (w /2 - m_bmpDirColorCCW.width / 2, h / 2 + m_cardHeight / 4)
+		}
+		else
+		{
+			// landscape, and near-square, which is placed the same way
+			m_topMargin = m_cardHeight / 4
+			m_bottomMargin = m_cardHeight / 4 + m_bottomMarginExternal
+			m_ptDrawPile = Point (w / 2 - 5 * m_cardWidth / 4, h / 2 - m_cardHeight / 2)
+			m_ptDiscardPile = Point (w / 2 + m_cardWidth / 4, h / 2 - m_cardHeight / 2)
+			m_ptDirColor = Point (m_ptDiscardPile!!.x + 2 * m_cardWidth + m_bmpDirColorCCW.width / 4 - m_bmpPlayerIndicator[0][0]!!.width, h / 2 - m_bmpDirColorCCW.width / 2)
 		}
 
 		m_ptPlayerIndicator[Game.SEAT_NORTH - 1] = Point (m_ptDirColor!!.x + m_bmpDirColorCCW.width / 2 - m_bmpPlayerIndicator[0][0]!!.width / 2, m_ptDirColor!!.y - m_bmpPlayerIndicator[0][0]!!.height)
@@ -1092,25 +1173,34 @@ class GameTable private constructor(context: Context) : View(context)
 		}
 	}
 
-	private fun initCards ()
+private fun initCards ()
 	{
 		/*
 		 * I admit -- this code is nasty; it started with a simple lookup HashMap,
-		 * and gradually grew into 4 separate ones.  This could be a LOT cleaner.
+		 * and gradually grew into 4 separate ones.  This could be LOT cleaner.
 		 * I also don't like that I have to create all these card objects when there
 		 * are already card objects in the card deck.  But this was more convenient,
 		 * and it's hard to imagine that these objects are really taking up a lot of
 		 * RAM in the grand scheme of things.
+		 *
+		 * Decoded straight into m_imageSource rather than m_imageLookup. Every
+		 * bitmap here is drawn 1:1 -- drawCard sets a scale of 1,1 and only
+		 * translates -- so the bitmap's pixel size *is* the card's size, which is
+		 * why m_cardWidth is the card back's width and has always been. Sizing
+		 * cards to the window therefore means scaling the bitmaps, and scaling
+		 * them repeatedly is not free of quality, so the decoded originals are
+		 * kept aside and never replaced.
 		 */
 		val res: Resources = context.resources
 
 		val opt = BitmapFactory.Options()
 		//opt.inScaled = false;
 
-		m_bmpCardBack = BitmapFactory.decodeResource(res, R.drawable.card_back, opt)
+		m_bmpCardBackSource = BitmapFactory.decodeResource(res, R.drawable.card_back, opt)
+		m_bmpCardBack = m_bmpCardBackSource
 
 		m_imageIDLookup.put (Card.ID_RED_0, R.drawable.card_red_0)
-		m_imageLookup.put (Card.ID_RED_0, BitmapFactory.decodeResource(res, R.drawable.card_red_0, opt))
+		m_imageSource.put (Card.ID_RED_0, BitmapFactory.decodeResource(res, R.drawable.card_red_0, opt))
 		m_cardHelpLookup.put (Card.ID_RED_0, R.string.cardhelp_0)
 		// 0.0 and not 0: the sixth argument is the point multiplier, a Double, and
 		// Kotlin will not read an integer literal as one. Java widened the int
@@ -1119,293 +1209,293 @@ class GameTable private constructor(context: Context) : View(context)
 		m_cardLookup.put (Card.ID_RED_0, Card(-1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, 0.0))
 
 		m_imageIDLookup.put (Card.ID_RED_1, R.drawable.card_red_1)
-		m_imageLookup.put (Card.ID_RED_1, BitmapFactory.decodeResource(res, R.drawable.card_red_1, opt))
+		m_imageSource.put (Card.ID_RED_1, BitmapFactory.decodeResource(res, R.drawable.card_red_1, opt))
 		m_cardHelpLookup.put (Card.ID_RED_1, R.string.cardhelp_1)
 		m_cardLookup.put (Card.ID_RED_1, Card(-1, Card.COLOR_RED, 1, Card.ID_RED_1, 1))
 
 		m_imageIDLookup.put (Card.ID_RED_2, R.drawable.card_red_2)
-		m_imageLookup.put (Card.ID_RED_2, BitmapFactory.decodeResource(res, R.drawable.card_red_2, opt))
+		m_imageSource.put (Card.ID_RED_2, BitmapFactory.decodeResource(res, R.drawable.card_red_2, opt))
 		m_cardHelpLookup.put (Card.ID_RED_2, R.string.cardhelp_2)
 		m_cardLookup.put (Card.ID_RED_2, Card(-1, Card.COLOR_RED, 2, Card.ID_RED_2, 2))
 
 		m_imageIDLookup.put (Card.ID_RED_3, R.drawable.card_red_3)
-		m_imageLookup.put (Card.ID_RED_3, BitmapFactory.decodeResource(res, R.drawable.card_red_3, opt))
+		m_imageSource.put (Card.ID_RED_3, BitmapFactory.decodeResource(res, R.drawable.card_red_3, opt))
 		m_cardHelpLookup.put (Card.ID_RED_3, R.string.cardhelp_3)
 		m_cardLookup.put (Card.ID_RED_3, Card(-1, Card.COLOR_RED, 3, Card.ID_RED_3, 3))
 
 		m_imageIDLookup.put (Card.ID_RED_4, R.drawable.card_red_4)
-		m_imageLookup.put (Card.ID_RED_4, BitmapFactory.decodeResource(res, R.drawable.card_red_4, opt))
+		m_imageSource.put (Card.ID_RED_4, BitmapFactory.decodeResource(res, R.drawable.card_red_4, opt))
 		m_cardHelpLookup.put (Card.ID_RED_4, R.string.cardhelp_4)
 		m_cardLookup.put (Card.ID_RED_4, Card(-1, Card.COLOR_RED, 4, Card.ID_RED_4, 4))
 
 		m_imageIDLookup.put (Card.ID_RED_5, R.drawable.card_red_5)
-		m_imageLookup.put (Card.ID_RED_5, BitmapFactory.decodeResource(res, R.drawable.card_red_5, opt))
+		m_imageSource.put (Card.ID_RED_5, BitmapFactory.decodeResource(res, R.drawable.card_red_5, opt))
 		m_cardHelpLookup.put (Card.ID_RED_5, R.string.cardhelp_5)
 		m_cardLookup.put (Card.ID_RED_5, Card(-1, Card.COLOR_RED, 5, Card.ID_RED_5, 5))
 
 		m_imageIDLookup.put (Card.ID_RED_6, R.drawable.card_red_6)
-		m_imageLookup.put (Card.ID_RED_6, BitmapFactory.decodeResource(res, R.drawable.card_red_6, opt))
+		m_imageSource.put (Card.ID_RED_6, BitmapFactory.decodeResource(res, R.drawable.card_red_6, opt))
 		m_cardHelpLookup.put (Card.ID_RED_6, R.string.cardhelp_6)
 		m_cardLookup.put (Card.ID_RED_6, Card(-1, Card.COLOR_RED, 6, Card.ID_RED_6, 6))
 
 		m_imageIDLookup.put (Card.ID_RED_7, R.drawable.card_red_7)
-		m_imageLookup.put (Card.ID_RED_7, BitmapFactory.decodeResource(res, R.drawable.card_red_7, opt))
+		m_imageSource.put (Card.ID_RED_7, BitmapFactory.decodeResource(res, R.drawable.card_red_7, opt))
 		m_cardHelpLookup.put (Card.ID_RED_7, R.string.cardhelp_7)
 		m_cardLookup.put (Card.ID_RED_7, Card(-1, Card.COLOR_RED, 7, Card.ID_RED_7, 7))
 
 		m_imageIDLookup.put (Card.ID_RED_8, R.drawable.card_red_8)
-		m_imageLookup.put (Card.ID_RED_8, BitmapFactory.decodeResource(res, R.drawable.card_red_8, opt))
+		m_imageSource.put (Card.ID_RED_8, BitmapFactory.decodeResource(res, R.drawable.card_red_8, opt))
 		m_cardHelpLookup.put (Card.ID_RED_8, R.string.cardhelp_8)
 		m_cardLookup.put (Card.ID_RED_8, Card(-1, Card.COLOR_RED, 8, Card.ID_RED_8, 8))
 
 		m_imageIDLookup.put (Card.ID_RED_9, R.drawable.card_red_9)
-		m_imageLookup.put (Card.ID_RED_9, BitmapFactory.decodeResource(res, R.drawable.card_red_9, opt))
+		m_imageSource.put (Card.ID_RED_9, BitmapFactory.decodeResource(res, R.drawable.card_red_9, opt))
 		m_cardHelpLookup.put (Card.ID_RED_9, R.string.cardhelp_9)
 		m_cardLookup.put (Card.ID_RED_9, Card(-1, Card.COLOR_RED, 9, Card.ID_RED_9, 9))
 
 		m_imageIDLookup.put (Card.ID_RED_D, R.drawable.card_red_d)
-		m_imageLookup.put (Card.ID_RED_D, BitmapFactory.decodeResource(res, R.drawable.card_red_d, opt))
+		m_imageSource.put (Card.ID_RED_D, BitmapFactory.decodeResource(res, R.drawable.card_red_d, opt))
 		m_cardHelpLookup.put (Card.ID_RED_D, R.string.cardhelp_d)
 		m_cardLookup.put (Card.ID_RED_D, Card(-1, Card.COLOR_RED, Card.VAL_D, Card.ID_RED_D, 20))
 
 		m_imageIDLookup.put (Card.ID_RED_S, R.drawable.card_red_s)
-		m_imageLookup.put (Card.ID_RED_S, BitmapFactory.decodeResource(res, R.drawable.card_red_s, opt))
+		m_imageSource.put (Card.ID_RED_S, BitmapFactory.decodeResource(res, R.drawable.card_red_s, opt))
 		m_cardHelpLookup.put (Card.ID_RED_S, R.string.cardhelp_s)
 		m_cardLookup.put (Card.ID_RED_S, Card(-1, Card.COLOR_RED, Card.VAL_S, Card.ID_RED_S, 20))
 
 		m_imageIDLookup.put (Card.ID_RED_R, R.drawable.card_red_r)
-		m_imageLookup.put (Card.ID_RED_R, BitmapFactory.decodeResource(res, R.drawable.card_red_r, opt))
+		m_imageSource.put (Card.ID_RED_R, BitmapFactory.decodeResource(res, R.drawable.card_red_r, opt))
 		m_cardHelpLookup.put (Card.ID_RED_R, R.string.cardhelp_r)
 		m_cardLookup.put (Card.ID_RED_R, Card(-1, Card.COLOR_RED, Card.VAL_R, Card.ID_RED_R, 20))
 
 		m_imageIDLookup.put (Card.ID_GREEN_0, R.drawable.card_green_0)
-		m_imageLookup.put (Card.ID_GREEN_0, BitmapFactory.decodeResource(res, R.drawable.card_green_0, opt))
+		m_imageSource.put (Card.ID_GREEN_0, BitmapFactory.decodeResource(res, R.drawable.card_green_0, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_0, R.string.cardhelp_0)
 		m_cardLookup.put (Card.ID_GREEN_0, Card(-1, Card.COLOR_GREEN, 0, Card.ID_GREEN_0_QUITTER, 0))
 
 		m_imageIDLookup.put (Card.ID_GREEN_1, R.drawable.card_green_1)
-		m_imageLookup.put (Card.ID_GREEN_1, BitmapFactory.decodeResource(res, R.drawable.card_green_1, opt))
+		m_imageSource.put (Card.ID_GREEN_1, BitmapFactory.decodeResource(res, R.drawable.card_green_1, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_1, R.string.cardhelp_1)
 		m_cardLookup.put (Card.ID_GREEN_1, Card(-1, Card.COLOR_GREEN, 1, Card.ID_GREEN_1, 1))
 
 		m_imageIDLookup.put (Card.ID_GREEN_2, R.drawable.card_green_2)
-		m_imageLookup.put (Card.ID_GREEN_2, BitmapFactory.decodeResource(res, R.drawable.card_green_2, opt))
+		m_imageSource.put (Card.ID_GREEN_2, BitmapFactory.decodeResource(res, R.drawable.card_green_2, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_2, R.string.cardhelp_2)
 		m_cardLookup.put (Card.ID_GREEN_2, Card(-1, Card.COLOR_GREEN, 2, Card.ID_GREEN_2, 2))
 
 		m_imageIDLookup.put (Card.ID_GREEN_3, R.drawable.card_green_3)
-		m_imageLookup.put (Card.ID_GREEN_3, BitmapFactory.decodeResource(res, R.drawable.card_green_3, opt))
+		m_imageSource.put (Card.ID_GREEN_3, BitmapFactory.decodeResource(res, R.drawable.card_green_3, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_3, R.string.cardhelp_3)
 		m_cardLookup.put (Card.ID_GREEN_3, Card(-1, Card.COLOR_GREEN, 3, Card.ID_GREEN_3, 3))
 
 		m_imageIDLookup.put (Card.ID_GREEN_4, R.drawable.card_green_4)
-		m_imageLookup.put (Card.ID_GREEN_4, BitmapFactory.decodeResource(res, R.drawable.card_green_4, opt))
+		m_imageSource.put (Card.ID_GREEN_4, BitmapFactory.decodeResource(res, R.drawable.card_green_4, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_4, R.string.cardhelp_4)
 		m_cardLookup.put (Card.ID_GREEN_4, Card(-1, Card.COLOR_GREEN, 4, Card.ID_GREEN_4, 4))
 
 		m_imageIDLookup.put (Card.ID_GREEN_5, R.drawable.card_green_5)
-		m_imageLookup.put (Card.ID_GREEN_5, BitmapFactory.decodeResource(res, R.drawable.card_green_5, opt))
+		m_imageSource.put (Card.ID_GREEN_5, BitmapFactory.decodeResource(res, R.drawable.card_green_5, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_5, R.string.cardhelp_5)
 		m_cardLookup.put (Card.ID_GREEN_5, Card(-1, Card.COLOR_GREEN, 5, Card.ID_GREEN_5, 5))
 
 		m_imageIDLookup.put (Card.ID_GREEN_6, R.drawable.card_green_6)
-		m_imageLookup.put (Card.ID_GREEN_6, BitmapFactory.decodeResource(res, R.drawable.card_green_6, opt))
+		m_imageSource.put (Card.ID_GREEN_6, BitmapFactory.decodeResource(res, R.drawable.card_green_6, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_6, R.string.cardhelp_6)
 		m_cardLookup.put (Card.ID_GREEN_6, Card(-1, Card.COLOR_GREEN, 6, Card.ID_GREEN_6, 6))
 
 		m_imageIDLookup.put (Card.ID_GREEN_7, R.drawable.card_green_7)
-		m_imageLookup.put (Card.ID_GREEN_7, BitmapFactory.decodeResource(res, R.drawable.card_green_7, opt))
+		m_imageSource.put (Card.ID_GREEN_7, BitmapFactory.decodeResource(res, R.drawable.card_green_7, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_7, R.string.cardhelp_7)
 		m_cardLookup.put (Card.ID_GREEN_7, Card(-1, Card.COLOR_GREEN, 7, Card.ID_GREEN_7, 7))
 
 		m_imageIDLookup.put (Card.ID_GREEN_8, R.drawable.card_green_8)
-		m_imageLookup.put (Card.ID_GREEN_8, BitmapFactory.decodeResource(res, R.drawable.card_green_8, opt))
+		m_imageSource.put (Card.ID_GREEN_8, BitmapFactory.decodeResource(res, R.drawable.card_green_8, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_8, R.string.cardhelp_8)
 		m_cardLookup.put (Card.ID_GREEN_8, Card(-1, Card.COLOR_GREEN, 8, Card.ID_GREEN_8, 8))
 
 		m_imageIDLookup.put (Card.ID_GREEN_9, R.drawable.card_green_9)
-		m_imageLookup.put (Card.ID_GREEN_9, BitmapFactory.decodeResource(res, R.drawable.card_green_9, opt))
+		m_imageSource.put (Card.ID_GREEN_9, BitmapFactory.decodeResource(res, R.drawable.card_green_9, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_9, R.string.cardhelp_9)
 		m_cardLookup.put (Card.ID_GREEN_9, Card(-1, Card.COLOR_GREEN, 9, Card.ID_GREEN_9, 9))
 
 		m_imageIDLookup.put (Card.ID_GREEN_D, R.drawable.card_green_d)
-		m_imageLookup.put (Card.ID_GREEN_D, BitmapFactory.decodeResource(res, R.drawable.card_green_d, opt))
+		m_imageSource.put (Card.ID_GREEN_D, BitmapFactory.decodeResource(res, R.drawable.card_green_d, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_D, R.string.cardhelp_d)
 		m_cardLookup.put (Card.ID_GREEN_D, Card(-1, Card.COLOR_GREEN, Card.VAL_D, Card.ID_GREEN_D, 20))
 
 		m_imageIDLookup.put (Card.ID_GREEN_S, R.drawable.card_green_s)
-		m_imageLookup.put (Card.ID_GREEN_S, BitmapFactory.decodeResource(res, R.drawable.card_green_s, opt))
+		m_imageSource.put (Card.ID_GREEN_S, BitmapFactory.decodeResource(res, R.drawable.card_green_s, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_S, R.string.cardhelp_s)
 		m_cardLookup.put (Card.ID_GREEN_S, Card(-1, Card.COLOR_GREEN, Card.VAL_S, Card.ID_GREEN_S, 20))
 
 		m_imageIDLookup.put (Card.ID_GREEN_R, R.drawable.card_green_r)
-		m_imageLookup.put (Card.ID_GREEN_R, BitmapFactory.decodeResource(res, R.drawable.card_green_r, opt))
+		m_imageSource.put (Card.ID_GREEN_R, BitmapFactory.decodeResource(res, R.drawable.card_green_r, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_R, R.string.cardhelp_r)
 		m_cardLookup.put (Card.ID_GREEN_R, Card(-1, Card.COLOR_GREEN, Card.VAL_R, Card.ID_GREEN_R, 20))
 
 		m_imageIDLookup.put (Card.ID_BLUE_0, R.drawable.card_blue_0)
-		m_imageLookup.put (Card.ID_BLUE_0, BitmapFactory.decodeResource(res, R.drawable.card_blue_0, opt))
+		m_imageSource.put (Card.ID_BLUE_0, BitmapFactory.decodeResource(res, R.drawable.card_blue_0, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_0, R.string.cardhelp_0)
 		m_cardLookup.put (Card.ID_BLUE_0, Card(-1, Card.COLOR_BLUE, 0, Card.ID_BLUE_0, 0))
 
 		m_imageIDLookup.put (Card.ID_BLUE_1, R.drawable.card_blue_1)
-		m_imageLookup.put (Card.ID_BLUE_1, BitmapFactory.decodeResource(res, R.drawable.card_blue_1, opt))
+		m_imageSource.put (Card.ID_BLUE_1, BitmapFactory.decodeResource(res, R.drawable.card_blue_1, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_1, R.string.cardhelp_1)
 		m_cardLookup.put (Card.ID_BLUE_1, Card(-1, Card.COLOR_BLUE, 1, Card.ID_BLUE_1, 1))
 
 		m_imageIDLookup.put (Card.ID_BLUE_2, R.drawable.card_blue_2)
-		m_imageLookup.put (Card.ID_BLUE_2, BitmapFactory.decodeResource(res, R.drawable.card_blue_2, opt))
+		m_imageSource.put (Card.ID_BLUE_2, BitmapFactory.decodeResource(res, R.drawable.card_blue_2, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_2, R.string.cardhelp_2)
 		m_cardLookup.put (Card.ID_BLUE_2, Card(-1, Card.COLOR_BLUE, 2, Card.ID_BLUE_2, 2))
 
 		m_imageIDLookup.put (Card.ID_BLUE_3, R.drawable.card_blue_3)
-		m_imageLookup.put (Card.ID_BLUE_3, BitmapFactory.decodeResource(res, R.drawable.card_blue_3, opt))
+		m_imageSource.put (Card.ID_BLUE_3, BitmapFactory.decodeResource(res, R.drawable.card_blue_3, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_3, R.string.cardhelp_3)
 		m_cardLookup.put (Card.ID_BLUE_3, Card(-1, Card.COLOR_BLUE, 3, Card.ID_BLUE_3, 3))
 
 		m_imageIDLookup.put (Card.ID_BLUE_4, R.drawable.card_blue_4)
-		m_imageLookup.put (Card.ID_BLUE_4, BitmapFactory.decodeResource(res, R.drawable.card_blue_4, opt))
+		m_imageSource.put (Card.ID_BLUE_4, BitmapFactory.decodeResource(res, R.drawable.card_blue_4, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_4, R.string.cardhelp_4)
 		m_cardLookup.put (Card.ID_BLUE_4, Card(-1, Card.COLOR_BLUE, 4, Card.ID_BLUE_4, 4))
 
 		m_imageIDLookup.put (Card.ID_BLUE_5, R.drawable.card_blue_5)
-		m_imageLookup.put (Card.ID_BLUE_5, BitmapFactory.decodeResource(res, R.drawable.card_blue_5, opt))
+		m_imageSource.put (Card.ID_BLUE_5, BitmapFactory.decodeResource(res, R.drawable.card_blue_5, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_5, R.string.cardhelp_5)
 		m_cardLookup.put (Card.ID_BLUE_5, Card(-1, Card.COLOR_BLUE, 5, Card.ID_BLUE_5, 5))
 
 		m_imageIDLookup.put (Card.ID_BLUE_6, R.drawable.card_blue_6)
-		m_imageLookup.put (Card.ID_BLUE_6, BitmapFactory.decodeResource(res, R.drawable.card_blue_6, opt))
+		m_imageSource.put (Card.ID_BLUE_6, BitmapFactory.decodeResource(res, R.drawable.card_blue_6, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_6, R.string.cardhelp_6)
 		m_cardLookup.put (Card.ID_BLUE_6, Card(-1, Card.COLOR_BLUE, 6, Card.ID_BLUE_6, 6))
 
 		m_imageIDLookup.put (Card.ID_BLUE_7, R.drawable.card_blue_7)
-		m_imageLookup.put (Card.ID_BLUE_7, BitmapFactory.decodeResource(res, R.drawable.card_blue_7, opt))
+		m_imageSource.put (Card.ID_BLUE_7, BitmapFactory.decodeResource(res, R.drawable.card_blue_7, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_7, R.string.cardhelp_7)
 		m_cardLookup.put (Card.ID_BLUE_7, Card(-1, Card.COLOR_BLUE, 7, Card.ID_BLUE_7, 7))
 
 		m_imageIDLookup.put (Card.ID_BLUE_8, R.drawable.card_blue_8)
-		m_imageLookup.put (Card.ID_BLUE_8, BitmapFactory.decodeResource(res, R.drawable.card_blue_8, opt))
+		m_imageSource.put (Card.ID_BLUE_8, BitmapFactory.decodeResource(res, R.drawable.card_blue_8, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_8, R.string.cardhelp_8)
 		m_cardLookup.put (Card.ID_BLUE_8, Card(-1, Card.COLOR_BLUE, 8, Card.ID_BLUE_8, 8))
 
 		m_imageIDLookup.put (Card.ID_BLUE_9, R.drawable.card_blue_9)
-		m_imageLookup.put (Card.ID_BLUE_9, BitmapFactory.decodeResource(res, R.drawable.card_blue_9, opt))
+		m_imageSource.put (Card.ID_BLUE_9, BitmapFactory.decodeResource(res, R.drawable.card_blue_9, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_9, R.string.cardhelp_9)
 		m_cardLookup.put (Card.ID_BLUE_9, Card(-1, Card.COLOR_BLUE, 9, Card.ID_BLUE_9, 9))
 
 		m_imageIDLookup.put (Card.ID_BLUE_D, R.drawable.card_blue_d)
-		m_imageLookup.put (Card.ID_BLUE_D, BitmapFactory.decodeResource(res, R.drawable.card_blue_d, opt))
+		m_imageSource.put (Card.ID_BLUE_D, BitmapFactory.decodeResource(res, R.drawable.card_blue_d, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_D, R.string.cardhelp_d)
 		m_cardLookup.put (Card.ID_BLUE_D, Card(-1, Card.COLOR_BLUE, Card.VAL_D, Card.ID_BLUE_D, 20))
 
 		m_imageIDLookup.put (Card.ID_BLUE_S, R.drawable.card_blue_s)
-		m_imageLookup.put (Card.ID_BLUE_S, BitmapFactory.decodeResource(res, R.drawable.card_blue_s, opt))
+		m_imageSource.put (Card.ID_BLUE_S, BitmapFactory.decodeResource(res, R.drawable.card_blue_s, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_S, R.string.cardhelp_s)
 		m_cardLookup.put (Card.ID_BLUE_S, Card(-1, Card.COLOR_BLUE, Card.VAL_S, Card.ID_BLUE_S, 20))
 
 		m_imageIDLookup.put (Card.ID_BLUE_R, R.drawable.card_blue_r)
-		m_imageLookup.put (Card.ID_BLUE_R, BitmapFactory.decodeResource(res, R.drawable.card_blue_r, opt))
+		m_imageSource.put (Card.ID_BLUE_R, BitmapFactory.decodeResource(res, R.drawable.card_blue_r, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_R, R.string.cardhelp_r)
 		m_cardLookup.put (Card.ID_BLUE_R, Card(-1, Card.COLOR_BLUE, Card.VAL_R, Card.ID_BLUE_R, 20))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_0, R.drawable.card_yellow_0)
-		m_imageLookup.put (Card.ID_YELLOW_0, BitmapFactory.decodeResource(res, R.drawable.card_yellow_0, opt))
+		m_imageSource.put (Card.ID_YELLOW_0, BitmapFactory.decodeResource(res, R.drawable.card_yellow_0, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_0, R.string.cardhelp_0)
 		m_cardLookup.put (Card.ID_YELLOW_0, Card(-1, Card.COLOR_YELLOW, 0, Card.ID_YELLOW_0, 0))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_1, R.drawable.card_yellow_1)
-		m_imageLookup.put (Card.ID_YELLOW_1, BitmapFactory.decodeResource(res, R.drawable.card_yellow_1, opt))
+		m_imageSource.put (Card.ID_YELLOW_1, BitmapFactory.decodeResource(res, R.drawable.card_yellow_1, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_1, R.string.cardhelp_1)
 		m_cardLookup.put (Card.ID_YELLOW_1, Card(-1, Card.COLOR_YELLOW, 1, Card.ID_YELLOW_1, 1))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_2, R.drawable.card_yellow_2)
-		m_imageLookup.put (Card.ID_YELLOW_2, BitmapFactory.decodeResource(res, R.drawable.card_yellow_2, opt))
+		m_imageSource.put (Card.ID_YELLOW_2, BitmapFactory.decodeResource(res, R.drawable.card_yellow_2, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_2, R.string.cardhelp_2)
 		m_cardLookup.put (Card.ID_YELLOW_2, Card(-1, Card.COLOR_YELLOW, 2, Card.ID_YELLOW_2, 2))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_3, R.drawable.card_yellow_3)
-		m_imageLookup.put (Card.ID_YELLOW_3, BitmapFactory.decodeResource(res, R.drawable.card_yellow_3, opt))
+		m_imageSource.put (Card.ID_YELLOW_3, BitmapFactory.decodeResource(res, R.drawable.card_yellow_3, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_3, R.string.cardhelp_3)
 		m_cardLookup.put (Card.ID_YELLOW_3, Card(-1, Card.COLOR_YELLOW, 3, Card.ID_YELLOW_3, 3))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_4, R.drawable.card_yellow_4)
-		m_imageLookup.put (Card.ID_YELLOW_4, BitmapFactory.decodeResource(res, R.drawable.card_yellow_4, opt))
+		m_imageSource.put (Card.ID_YELLOW_4, BitmapFactory.decodeResource(res, R.drawable.card_yellow_4, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_4, R.string.cardhelp_4)
 		m_cardLookup.put (Card.ID_YELLOW_4, Card(-1, Card.COLOR_YELLOW, 4, Card.ID_YELLOW_4, 4))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_5, R.drawable.card_yellow_5)
-		m_imageLookup.put (Card.ID_YELLOW_5, BitmapFactory.decodeResource(res, R.drawable.card_yellow_5, opt))
+		m_imageSource.put (Card.ID_YELLOW_5, BitmapFactory.decodeResource(res, R.drawable.card_yellow_5, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_5, R.string.cardhelp_5)
 		m_cardLookup.put (Card.ID_YELLOW_5, Card(-1, Card.COLOR_YELLOW, 5, Card.ID_YELLOW_5, 5))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_6, R.drawable.card_yellow_6)
-		m_imageLookup.put (Card.ID_YELLOW_6, BitmapFactory.decodeResource(res, R.drawable.card_yellow_6, opt))
+		m_imageSource.put (Card.ID_YELLOW_6, BitmapFactory.decodeResource(res, R.drawable.card_yellow_6, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_6, R.string.cardhelp_6)
 		m_cardLookup.put (Card.ID_YELLOW_6, Card(-1, Card.COLOR_YELLOW, 6, Card.ID_YELLOW_6, 6))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_7, R.drawable.card_yellow_7)
-		m_imageLookup.put (Card.ID_YELLOW_7, BitmapFactory.decodeResource(res, R.drawable.card_yellow_7, opt))
+		m_imageSource.put (Card.ID_YELLOW_7, BitmapFactory.decodeResource(res, R.drawable.card_yellow_7, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_7, R.string.cardhelp_7)
 		m_cardLookup.put (Card.ID_YELLOW_7, Card(-1, Card.COLOR_YELLOW, 7, Card.ID_YELLOW_7, 7))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_8, R.drawable.card_yellow_8)
-		m_imageLookup.put (Card.ID_YELLOW_8, BitmapFactory.decodeResource(res, R.drawable.card_yellow_8, opt))
+		m_imageSource.put (Card.ID_YELLOW_8, BitmapFactory.decodeResource(res, R.drawable.card_yellow_8, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_8, R.string.cardhelp_8)
 		m_cardLookup.put (Card.ID_YELLOW_8, Card(-1, Card.COLOR_YELLOW, 8, Card.ID_YELLOW_8, 8))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_9, R.drawable.card_yellow_9)
-		m_imageLookup.put (Card.ID_YELLOW_9, BitmapFactory.decodeResource(res, R.drawable.card_yellow_9, opt))
+		m_imageSource.put (Card.ID_YELLOW_9, BitmapFactory.decodeResource(res, R.drawable.card_yellow_9, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_9, R.string.cardhelp_9)
 		m_cardLookup.put (Card.ID_YELLOW_9, Card(-1, Card.COLOR_YELLOW, 9, Card.ID_YELLOW_9, 9))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_D, R.drawable.card_yellow_d)
-		m_imageLookup.put (Card.ID_YELLOW_D, BitmapFactory.decodeResource(res, R.drawable.card_yellow_d, opt))
+		m_imageSource.put (Card.ID_YELLOW_D, BitmapFactory.decodeResource(res, R.drawable.card_yellow_d, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_D, R.string.cardhelp_d)
 		m_cardLookup.put (Card.ID_YELLOW_D, Card(-1, Card.COLOR_YELLOW, Card.VAL_D, Card.ID_YELLOW_D, 20))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_S, R.drawable.card_yellow_s)
-		m_imageLookup.put (Card.ID_YELLOW_S, BitmapFactory.decodeResource(res, R.drawable.card_yellow_s, opt))
+		m_imageSource.put (Card.ID_YELLOW_S, BitmapFactory.decodeResource(res, R.drawable.card_yellow_s, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_S, R.string.cardhelp_s)
 		m_cardLookup.put (Card.ID_YELLOW_S, Card(-1, Card.COLOR_YELLOW, Card.VAL_S, Card.ID_YELLOW_S, 20))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_R, R.drawable.card_yellow_r)
-		m_imageLookup.put (Card.ID_YELLOW_R, BitmapFactory.decodeResource(res, R.drawable.card_yellow_r, opt))
+		m_imageSource.put (Card.ID_YELLOW_R, BitmapFactory.decodeResource(res, R.drawable.card_yellow_r, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_R, R.string.cardhelp_r)
 		m_cardLookup.put (Card.ID_YELLOW_R, Card(-1, Card.COLOR_YELLOW, Card.VAL_R, Card.ID_YELLOW_R, 20))
 
 
 		m_imageIDLookup.put (Card.ID_WILD, R.drawable.card_wild)
-		m_imageLookup.put (Card.ID_WILD, BitmapFactory.decodeResource(res, R.drawable.card_wild, opt))
+		m_imageSource.put (Card.ID_WILD, BitmapFactory.decodeResource(res, R.drawable.card_wild, opt))
 		m_cardHelpLookup.put (Card.ID_WILD, R.string.cardhelp_wild)
 		m_cardLookup.put (Card.ID_WILD, Card(-1, Card.COLOR_WILD, Card.VAL_WILD, Card.ID_WILD, 50))
 
 		m_imageIDLookup.put (Card.ID_WILD_DRAWFOUR, R.drawable.card_wild_drawfour)
-		m_imageLookup.put (Card.ID_WILD_DRAWFOUR, BitmapFactory.decodeResource(res, R.drawable.card_wild_drawfour, opt))
+		m_imageSource.put (Card.ID_WILD_DRAWFOUR, BitmapFactory.decodeResource(res, R.drawable.card_wild_drawfour, opt))
 		m_cardHelpLookup.put (Card.ID_WILD_DRAWFOUR, R.string.cardhelp_wild_drawfour)
 		m_cardLookup.put (Card.ID_WILD_DRAWFOUR, Card(-1, Card.COLOR_WILD, Card.VAL_WILD_DRAWFOUR, Card.ID_WILD_DRAWFOUR, 50))
 
 		m_imageIDLookup.put (Card.ID_WILD_HOS, R.drawable.card_wild_hos)
-		m_imageLookup.put (Card.ID_WILD_HOS, BitmapFactory.decodeResource(res, R.drawable.card_wild_hos, opt))
+		m_imageSource.put (Card.ID_WILD_HOS, BitmapFactory.decodeResource(res, R.drawable.card_wild_hos, opt))
 		m_cardHelpLookup.put (Card.ID_WILD_HOS, R.string.cardhelp_wild_hos)
 		m_cardLookup.put (Card.ID_WILD_HOS, Card(-1, Card.COLOR_WILD, Card.VAL_WILD_DRAWFOUR, Card.ID_WILD_HOS, 0))
 
 		m_imageIDLookup.put (Card.ID_WILD_HD, R.drawable.card_wild_hd)
-		m_imageLookup.put (Card.ID_WILD_HD, BitmapFactory.decodeResource(res, R.drawable.card_wild_hd, opt))
+		m_imageSource.put (Card.ID_WILD_HD, BitmapFactory.decodeResource(res, R.drawable.card_wild_hd, opt))
 		m_cardHelpLookup.put (Card.ID_WILD_HD, R.string.cardhelp_wild_hd)
 		m_cardLookup.put (Card.ID_WILD_HD, Card(-1, Card.COLOR_WILD, Card.VAL_WILD_DRAWFOUR, Card.ID_WILD_HD, 100))
 
 		m_imageIDLookup.put (Card.ID_WILD_MYSTERY, R.drawable.card_wild_mystery)
-		m_imageLookup.put (Card.ID_WILD_MYSTERY, BitmapFactory.decodeResource(res, R.drawable.card_wild_mystery, opt))
+		m_imageSource.put (Card.ID_WILD_MYSTERY, BitmapFactory.decodeResource(res, R.drawable.card_wild_mystery, opt))
 		m_cardHelpLookup.put (Card.ID_WILD_MYSTERY, R.string.cardhelp_wild_mystery)
 		m_cardLookup.put (Card.ID_WILD_MYSTERY, Card(-1, Card.COLOR_WILD, Card.VAL_WILD_DRAWFOUR, Card.ID_WILD_MYSTERY, 0))
 
 		m_imageIDLookup.put (Card.ID_WILD_DB, R.drawable.card_wild_db)
-		m_imageLookup.put (Card.ID_WILD_DB, BitmapFactory.decodeResource(res, R.drawable.card_wild_db, opt))
+		m_imageSource.put (Card.ID_WILD_DB, BitmapFactory.decodeResource(res, R.drawable.card_wild_db, opt))
 		m_cardHelpLookup.put (Card.ID_WILD_DB, R.string.cardhelp_wild_db)
 		m_cardLookup.put (Card.ID_WILD_DB, Card(-1, Card.COLOR_WILD, Card.VAL_WILD_DRAWFOUR, Card.ID_WILD_DB, 100))
 
 		m_imageIDLookup.put (Card.ID_RED_0_HD, R.drawable.card_red_0_hd)
-		m_imageLookup.put (Card.ID_RED_0_HD, BitmapFactory.decodeResource(res, R.drawable.card_red_0_hd, opt))
+		m_imageSource.put (Card.ID_RED_0_HD, BitmapFactory.decodeResource(res, R.drawable.card_red_0_hd, opt))
 		if (m_go!!.getFamilyFriendly())
 		{
 			m_cardHelpLookup.put (Card.ID_RED_0_HD, R.string.cardhelp_red_0_hd_ff)
@@ -1417,32 +1507,32 @@ class GameTable private constructor(context: Context) : View(context)
 		m_cardLookup.put (Card.ID_RED_0_HD, Card(-1, Card.COLOR_RED, 0, Card.ID_RED_0_HD, 0, 0.5))
 
 		m_imageIDLookup.put (Card.ID_RED_2_GLASNOST, R.drawable.card_red_2_glasnost)
-		m_imageLookup.put (Card.ID_RED_2_GLASNOST, BitmapFactory.decodeResource(res, R.drawable.card_red_2_glasnost, opt))
+		m_imageSource.put (Card.ID_RED_2_GLASNOST, BitmapFactory.decodeResource(res, R.drawable.card_red_2_glasnost, opt))
 		m_cardHelpLookup.put (Card.ID_RED_2_GLASNOST, R.string.cardhelp_red_2_glasnost)
 		m_cardLookup.put (Card.ID_RED_2_GLASNOST, Card(-1, Card.COLOR_RED, 2, Card.ID_RED_2_GLASNOST, 75))
 
 		m_imageIDLookup.put (Card.ID_RED_5_MAGIC, R.drawable.card_red_5_magic)
-		m_imageLookup.put (Card.ID_RED_5_MAGIC, BitmapFactory.decodeResource(res, R.drawable.card_red_5_magic, opt))
+		m_imageSource.put (Card.ID_RED_5_MAGIC, BitmapFactory.decodeResource(res, R.drawable.card_red_5_magic, opt))
 		m_cardHelpLookup.put (Card.ID_RED_5_MAGIC, R.string.cardhelp_red_5_magic)
 		m_cardLookup.put (Card.ID_RED_5_MAGIC, Card(-1, Card.COLOR_RED, 5, Card.ID_RED_5_MAGIC, -5))
 
 		m_imageIDLookup.put (Card.ID_RED_D_SPREADER, R.drawable.card_red_d_spreader)
-		m_imageLookup.put (Card.ID_RED_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_red_d_spreader, opt))
+		m_imageSource.put (Card.ID_RED_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_red_d_spreader, opt))
 		m_cardHelpLookup.put (Card.ID_RED_D_SPREADER, R.string.cardhelp_d_spread)
 		m_cardLookup.put (Card.ID_RED_D_SPREADER, Card(-1, Card.COLOR_RED, Card.VAL_D_SPREAD, Card.ID_RED_D_SPREADER, 60))
 
 		m_imageIDLookup.put (Card.ID_RED_S_DOUBLE, R.drawable.card_red_s_double)
-		m_imageLookup.put (Card.ID_RED_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_red_s_double, opt))
+		m_imageSource.put (Card.ID_RED_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_red_s_double, opt))
 		m_cardHelpLookup.put (Card.ID_RED_S_DOUBLE, R.string.cardhelp_s_double)
 		m_cardLookup.put (Card.ID_RED_S_DOUBLE, Card(-1, Card.COLOR_RED, Card.VAL_S_DOUBLE, Card.ID_RED_S_DOUBLE, 40))
 
 		m_imageIDLookup.put (Card.ID_RED_R_SKIP, R.drawable.card_red_r_skip)
-		m_imageLookup.put (Card.ID_RED_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_red_r_skip, opt))
+		m_imageSource.put (Card.ID_RED_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_red_r_skip, opt))
 		m_cardHelpLookup.put (Card.ID_RED_R_SKIP, R.string.cardhelp_r_skip)
 		m_cardLookup.put (Card.ID_RED_R_SKIP, Card(-1, Card.COLOR_RED, Card.VAL_R_SKIP, Card.ID_RED_R_SKIP, 40))
 
 		m_imageIDLookup.put (Card.ID_GREEN_0_QUITTER, R.drawable.card_green_0_quitter)
-		m_imageLookup.put (Card.ID_GREEN_0_QUITTER, BitmapFactory.decodeResource(res, R.drawable.card_green_0_quitter, opt))
+		m_imageSource.put (Card.ID_GREEN_0_QUITTER, BitmapFactory.decodeResource(res, R.drawable.card_green_0_quitter, opt))
 		if (m_go!!.getFamilyFriendly())
 		{
 			m_cardHelpLookup.put (Card.ID_GREEN_0_QUITTER, R.string.cardhelp_green_0_quitter_ff)
@@ -1456,92 +1546,92 @@ class GameTable private constructor(context: Context) : View(context)
 		if (m_go!!.getFamilyFriendly())
 		{
 			m_imageIDLookup.put (Card.ID_GREEN_3_AIDS, R.drawable.card_green_3_aids_ff)
-			m_imageLookup.put (Card.ID_GREEN_3_AIDS, BitmapFactory.decodeResource(res, R.drawable.card_green_3_aids_ff, opt))
+			m_imageSource.put (Card.ID_GREEN_3_AIDS, BitmapFactory.decodeResource(res, R.drawable.card_green_3_aids_ff, opt))
 			m_cardHelpLookup.put (Card.ID_GREEN_3_AIDS, R.string.cardhelp_green_3_aids_ff)
 		}
 		else
 		{
 			m_imageIDLookup.put (Card.ID_GREEN_3_AIDS, R.drawable.card_green_3_aids)
-			m_imageLookup.put (Card.ID_GREEN_3_AIDS, BitmapFactory.decodeResource(res, R.drawable.card_green_3_aids, opt))
+			m_imageSource.put (Card.ID_GREEN_3_AIDS, BitmapFactory.decodeResource(res, R.drawable.card_green_3_aids, opt))
 			m_cardHelpLookup.put (Card.ID_GREEN_3_AIDS, R.string.cardhelp_green_3_aids)
 		}
 		m_cardLookup.put (Card.ID_GREEN_3_AIDS, Card(-1, Card.COLOR_GREEN, 3, Card.ID_GREEN_3_AIDS, 3, 1.0, 10))
 
 		m_imageIDLookup.put (Card.ID_GREEN_4_IRISH, R.drawable.card_green_4_irish)
-		m_imageLookup.put (Card.ID_GREEN_4_IRISH, BitmapFactory.decodeResource(res, R.drawable.card_green_4_irish, opt))
+		m_imageSource.put (Card.ID_GREEN_4_IRISH, BitmapFactory.decodeResource(res, R.drawable.card_green_4_irish, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_4_IRISH, R.string.cardhelp_green_4_irish)
 		m_cardLookup.put (Card.ID_GREEN_4_IRISH, Card(-1, Card.COLOR_GREEN, 4, Card.ID_GREEN_4_IRISH, 75))
 
 		m_imageIDLookup.put (Card.ID_GREEN_D_SPREADER, R.drawable.card_green_d_spreader)
-		m_imageLookup.put (Card.ID_GREEN_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_green_d_spreader, opt))
+		m_imageSource.put (Card.ID_GREEN_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_green_d_spreader, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_D_SPREADER, R.string.cardhelp_d_spread)
 		m_cardLookup.put (Card.ID_GREEN_D_SPREADER, Card(-1, Card.COLOR_GREEN, Card.VAL_D_SPREAD, Card.ID_GREEN_D_SPREADER, 60))
 
 		m_imageIDLookup.put (Card.ID_GREEN_S_DOUBLE, R.drawable.card_green_s_double)
-		m_imageLookup.put (Card.ID_GREEN_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_green_s_double, opt))
+		m_imageSource.put (Card.ID_GREEN_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_green_s_double, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_S_DOUBLE, R.string.cardhelp_s_double)
 		m_cardLookup.put (Card.ID_GREEN_S_DOUBLE, Card(-1, Card.COLOR_GREEN, Card.VAL_S_DOUBLE, Card.ID_GREEN_S_DOUBLE, 40))
 
 		m_imageIDLookup.put (Card.ID_GREEN_R_SKIP, R.drawable.card_green_r_skip)
-		m_imageLookup.put (Card.ID_GREEN_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_green_r_skip, opt))
+		m_imageSource.put (Card.ID_GREEN_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_green_r_skip, opt))
 		m_cardHelpLookup.put (Card.ID_GREEN_R_SKIP, R.string.cardhelp_r_skip)
 		m_cardLookup.put (Card.ID_GREEN_R_SKIP, Card(-1, Card.COLOR_GREEN, Card.VAL_R_SKIP, Card.ID_GREEN_R_SKIP, 40))
 
 		if (m_go!!.getFamilyFriendly())
 		{
 			m_imageIDLookup.put (Card.ID_BLUE_0_FUCKYOU, R.drawable.card_blue_0_fuckyou_ff)
-			m_imageLookup.put (Card.ID_BLUE_0_FUCKYOU, BitmapFactory.decodeResource(res, R.drawable.card_blue_0_fuckyou_ff, opt))
+			m_imageSource.put (Card.ID_BLUE_0_FUCKYOU, BitmapFactory.decodeResource(res, R.drawable.card_blue_0_fuckyou_ff, opt))
 			m_cardHelpLookup.put (Card.ID_BLUE_0_FUCKYOU, R.string.cardhelp_blue_0_fuck_you_ff)
 		}
 		else
 		{
 			m_imageIDLookup.put (Card.ID_BLUE_0_FUCKYOU, R.drawable.card_blue_0_fuckyou)
-			m_imageLookup.put (Card.ID_BLUE_0_FUCKYOU, BitmapFactory.decodeResource(res, R.drawable.card_blue_0_fuckyou, opt))
+			m_imageSource.put (Card.ID_BLUE_0_FUCKYOU, BitmapFactory.decodeResource(res, R.drawable.card_blue_0_fuckyou, opt))
 			m_cardHelpLookup.put (Card.ID_BLUE_0_FUCKYOU, R.string.cardhelp_blue_0_fuck_you)
 		}
 		m_cardLookup.put (Card.ID_BLUE_0_FUCKYOU, Card(-1, Card.COLOR_BLUE, 0, Card.ID_BLUE_0_FUCKYOU, 0, 2.0))
 
 		m_imageIDLookup.put (Card.ID_BLUE_2_SHIELD, R.drawable.card_blue_2_shield)
-		m_imageLookup.put (Card.ID_BLUE_2_SHIELD, BitmapFactory.decodeResource(res, R.drawable.card_blue_2_shield, opt))
+		m_imageSource.put (Card.ID_BLUE_2_SHIELD, BitmapFactory.decodeResource(res, R.drawable.card_blue_2_shield, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_2_SHIELD, R.string.cardhelp_blue_2_shield)
 		m_cardLookup.put (Card.ID_BLUE_2_SHIELD, Card(-1, Card.COLOR_BLUE, 2, Card.ID_BLUE_2_SHIELD, 0, 1.0, 0, 1))
 
 		m_imageIDLookup.put (Card.ID_BLUE_D_SPREADER, R.drawable.card_blue_d_spreader)
-		m_imageLookup.put (Card.ID_BLUE_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_blue_d_spreader, opt))
+		m_imageSource.put (Card.ID_BLUE_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_blue_d_spreader, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_D_SPREADER, R.string.cardhelp_d_spread)
 		m_cardLookup.put (Card.ID_BLUE_D_SPREADER, Card(-1, Card.COLOR_BLUE, Card.VAL_D_SPREAD, Card.ID_BLUE_D_SPREADER, 60))
 
 		m_imageIDLookup.put (Card.ID_BLUE_S_DOUBLE, R.drawable.card_blue_s_double)
-		m_imageLookup.put (Card.ID_BLUE_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_blue_s_double, opt))
+		m_imageSource.put (Card.ID_BLUE_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_blue_s_double, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_S_DOUBLE, R.string.cardhelp_s_double)
 		m_cardLookup.put (Card.ID_BLUE_S_DOUBLE, Card(-1, Card.COLOR_BLUE, Card.VAL_S_DOUBLE, Card.ID_BLUE_S_DOUBLE, 40))
 
 		m_imageIDLookup.put (Card.ID_BLUE_R_SKIP, R.drawable.card_blue_r_skip)
-		m_imageLookup.put (Card.ID_BLUE_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_blue_r_skip, opt))
+		m_imageSource.put (Card.ID_BLUE_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_blue_r_skip, opt))
 		m_cardHelpLookup.put (Card.ID_BLUE_R_SKIP, R.string.cardhelp_r_skip)
 		m_cardLookup.put (Card.ID_BLUE_R_SKIP, Card(-1, Card.COLOR_BLUE, Card.VAL_R_SKIP, Card.ID_BLUE_R_SKIP, 40))
 
 		if (m_go!!.getFamilyFriendly())
 		{
 			m_imageIDLookup.put (Card.ID_YELLOW_0_SHITTER, R.drawable.card_yellow_0_shitter_ff)
-			m_imageLookup.put (Card.ID_YELLOW_0_SHITTER, BitmapFactory.decodeResource(res, R.drawable.card_yellow_0_shitter_ff, opt))
+			m_imageSource.put (Card.ID_YELLOW_0_SHITTER, BitmapFactory.decodeResource(res, R.drawable.card_yellow_0_shitter_ff, opt))
 			m_cardHelpLookup.put (Card.ID_YELLOW_0_SHITTER, R.string.cardhelp_yellow_0_shitter_ff)
 		}
 		else
 		{
 			m_imageIDLookup.put (Card.ID_YELLOW_0_SHITTER, R.drawable.card_yellow_0_shitter)
-			m_imageLookup.put (Card.ID_YELLOW_0_SHITTER, BitmapFactory.decodeResource(res, R.drawable.card_yellow_0_shitter, opt))
+			m_imageSource.put (Card.ID_YELLOW_0_SHITTER, BitmapFactory.decodeResource(res, R.drawable.card_yellow_0_shitter, opt))
 			m_cardHelpLookup.put (Card.ID_YELLOW_0_SHITTER, R.string.cardhelp_yellow_0_shitter)
 		}
 		m_cardLookup.put (Card.ID_YELLOW_0_SHITTER, Card(-1, Card.COLOR_YELLOW, 0, Card.ID_YELLOW_0_SHITTER, 0))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_1_MAD, R.drawable.card_yellow_1_mad)
-		m_imageLookup.put (Card.ID_YELLOW_1_MAD, BitmapFactory.decodeResource(res, R.drawable.card_yellow_1_mad, opt))
+		m_imageSource.put (Card.ID_YELLOW_1_MAD, BitmapFactory.decodeResource(res, R.drawable.card_yellow_1_mad, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_1_MAD, R.string.cardhelp_yellow_1_mad)
 		m_cardLookup.put (Card.ID_YELLOW_1_MAD, Card(-1, Card.COLOR_YELLOW, 1, Card.ID_YELLOW_1_MAD, 100))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_69, R.drawable.card_yellow_69)
-		m_imageLookup.put (Card.ID_YELLOW_69, BitmapFactory.decodeResource(res, R.drawable.card_yellow_69, opt))
+		m_imageSource.put (Card.ID_YELLOW_69, BitmapFactory.decodeResource(res, R.drawable.card_yellow_69, opt))
 		if (m_go!!.getFamilyFriendly())
 		{
 			m_cardHelpLookup.put (Card.ID_YELLOW_69, R.string.cardhelp_yellow_69_ff)
@@ -1553,17 +1643,17 @@ class GameTable private constructor(context: Context) : View(context)
 		m_cardLookup.put (Card.ID_YELLOW_69, Card(-1, Card.COLOR_YELLOW, 6, Card.ID_YELLOW_69, 6))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_D_SPREADER, R.drawable.card_yellow_d_spreader)
-		m_imageLookup.put (Card.ID_YELLOW_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_yellow_d_spreader, opt))
+		m_imageSource.put (Card.ID_YELLOW_D_SPREADER, BitmapFactory.decodeResource(res, R.drawable.card_yellow_d_spreader, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_D_SPREADER, R.string.cardhelp_d_spread)
 		m_cardLookup.put (Card.ID_YELLOW_D_SPREADER, Card(-1, Card.COLOR_YELLOW, Card.VAL_D_SPREAD, Card.ID_YELLOW_D_SPREADER, 60))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_S_DOUBLE, R.drawable.card_yellow_s_double)
-		m_imageLookup.put (Card.ID_YELLOW_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_yellow_s_double, opt))
+		m_imageSource.put (Card.ID_YELLOW_S_DOUBLE, BitmapFactory.decodeResource(res, R.drawable.card_yellow_s_double, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_S_DOUBLE, R.string.cardhelp_s_double)
 		m_cardLookup.put (Card.ID_YELLOW_S_DOUBLE, Card(-1, Card.COLOR_YELLOW, Card.VAL_S_DOUBLE, Card.ID_YELLOW_S_DOUBLE, 40))
 
 		m_imageIDLookup.put (Card.ID_YELLOW_R_SKIP, R.drawable.card_yellow_r_skip)
-		m_imageLookup.put (Card.ID_YELLOW_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_yellow_r_skip, opt))
+		m_imageSource.put (Card.ID_YELLOW_R_SKIP, BitmapFactory.decodeResource(res, R.drawable.card_yellow_r_skip, opt))
 		m_cardHelpLookup.put (Card.ID_YELLOW_R_SKIP, R.string.cardhelp_r_skip)
 		m_cardLookup.put (Card.ID_YELLOW_R_SKIP, Card(-1, Card.COLOR_YELLOW, Card.VAL_R_SKIP, Card.ID_YELLOW_R_SKIP, 40))
 
@@ -1701,6 +1791,126 @@ class GameTable private constructor(context: Context) : View(context)
 		m_cardIDs[i++] = Card.ID_WILD_HD
 		m_cardIDs[i++] = Card.ID_WILD_MYSTERY
 		m_cardIDs[i++] = Card.ID_WILD_DB
+
+		// The drawn map starts as the decoded map and is replaced by scaled
+		// copies the first time a window needs a card size other than the
+		// density's. Done here rather than left empty because applyCardScale is
+		// only reached from onSizeChanged, and m_cardWidth has to be right before
+		// that: the constructor reads the card back's dimensions immediately
+		// after this call returns.
+		m_imageLookup.putAll (m_imageSource)
+	}
+
+	/**
+	 * How far a card may be from the size its resource bucket gives it.
+	 *
+	 * A two-sided clamp, not a scale to the window. The reasoning is that the
+	 * current look on a phone is not an accident to be tidied up: at 1080x1920
+	 * the card is 52px wide at mdpi, 77 at hdpi and 103 at xhdpi, all of which
+	 * sit inside these bounds, so a phone is left exactly as it has always
+	 * looked. What moves is a window that the density got wrong for -- which is
+	 * the unfolded foldable, the tablet and anything in split-screen.
+	 *
+	 * The bounds, and what each one is for:
+	 *
+	 *  * **Width, ceiling.** Nine cards in the human's hand span six card widths,
+	 *    so a card of a tenth of the window puts that hand at 60% of the width.
+	 *    Past that, the hand crowds the seats it is drawn between.
+	 *  * **Width, floor.** A card under a twenty-second of the window stops being
+	 *    readable at arm's length, and the table reads as empty -- which is the
+	 *    other half of the sparseness on a large unfolded screen.
+	 *  * **Height, ceiling.** The east and west hands stack vertically at half a
+	 *    card width per card, so nine of them are about three card heights plus
+	 *    the top and bottom margins. A card over a quarter of the window height
+	 *    cannot fit its own hand.
+	 *  * **Height, floor.** The same argument read the other way, for a short
+	 *    window: there is a point below which the seat, the hand and the score
+	 *    text stop being distinguishable.
+	 *
+	 * Densities, for the record, because they are what this replaces: the card
+	 * art is 52x80 at mdpi, 77x120 at hdpi and 103x160 at xhdpi, and there are
+	 * no buckets above that in `res/`.
+	 */
+
+	/**
+	 * The scale a window asks for, or 1f to leave the cards alone.
+	 *
+	 * Both ends of the clamp are computed separately for width and height, and
+	 * the narrower of the two wins -- a card may not breach either ceiling, and
+	 * it satisfies the floor by obeying the *larger* of the two, since the
+	 * dimension with the more demanding floor is the one that has to hold.
+	 *
+	 * A window so extreme that the floors and the ceilings cross is resolved in
+	 * favour of the ceilings, because overflowing the table is worse than a card
+	 * that is small.
+	 */
+	private fun cardScaleFor (w: Int, h: Int): Float
+	{
+		val cardW = m_bmpCardBackSource.width
+		val cardH = m_bmpCardBackSource.height
+		if (cardW <= 0 || cardH <= 0 || w <= 0 || h <= 0)
+		{
+			// Not reachable from a laid-out view, and the old code would have
+			// divided by a zero card height rather than returning 1f. Returning
+			// the unscaled size is the conservative answer.
+			return 1f
+		}
+
+		val ceiling = min (w.toFloat() / MAX_CARD_WIDTH_DIVISOR / cardW,
+				h.toFloat() / MAX_CARD_HEIGHT_DIVISOR / cardH)
+		val floor = max (w.toFloat() / MIN_CARD_WIDTH_DIVISOR / cardW,
+				h.toFloat() / MIN_CARD_HEIGHT_DIVISOR / cardH)
+
+		return min (max (1f, floor), ceiling)
+	}
+
+	/**
+	 * Rescales the cards to the window, if the window asks for it.
+	 *
+	 * No-ops at 1f, which is the case for every phone this app has shipped on,
+	 * so the common path allocates nothing. When it does scale, every card is
+	 * rescaled from [m_imageSource] rather than from the copy already in
+	 * [m_imageLookup]: scaling a scaled bitmap resamples it, so a fold followed
+	 * by an unfold would soften the art twice over.
+	 *
+	 * The previous copies are left to the collector rather than recycled. They
+	 * are the only other reference to a bitmap nothing else holds, and a recycle
+	 * here would race a draw already in flight on the same frame this runs on.
+	 * Peak cost while scaling is therefore both sets at once, which for the 84
+	 * card faces is about 5.6MB of originals plus the scaled set at xhdpi.
+	 *
+	 * Called from `onSizeChanged`, which is inside a layout pass, so the scaling
+	 * happens before the frame that needed it. That is a few milliseconds of
+	 * work on a fold and a rotation, and nothing at all otherwise.
+	 */
+	private fun applyCardScale (w: Int, h: Int)
+	{
+		val scale = cardScaleFor (w, h)
+		if (scale == m_cardScale)
+		{
+			return
+		}
+		m_cardScale = scale
+
+		m_cardWidth = Math.round (m_bmpCardBackSource.width * scale)
+		m_cardHeight = Math.round (m_bmpCardBackSource.height * scale)
+
+		if (scale == 1f)
+		{
+			m_bmpCardBack = m_bmpCardBackSource
+			m_imageLookup.clear()
+			m_imageLookup.putAll (m_imageSource)
+			return
+		}
+
+		m_bmpCardBack = Bitmap.createScaledBitmap (m_bmpCardBackSource,
+				m_cardWidth, m_cardHeight, true)
+
+		for ((id, source) in m_imageSource)
+		{
+			m_imageLookup[id] = Bitmap.createScaledBitmap (source,
+					m_cardWidth, m_cardHeight, true)
+		}
 	}
 
 
@@ -1974,5 +2184,28 @@ class GameTable private constructor(context: Context) : View(context)
 	companion object
 	{
 		private const val ID = 42
+
+/**
+	 * How far from square a window has to be before it is one or the other.
+	 *
+	 * A quarter either way: outside 4:5 the window is decisively one or the
+	 * other, inside it the window is near enough square to be neither. The band
+	 * is that wide because a book-style foldable is what needs it -- unfolded it
+	 * is 2208x1840 one way and 1840x2208 the other, ratios of 1.20 and 0.83,
+	 * and it has to be near-square in *both* or the same device changes layout
+	 * when you turn it. A tenth either way would classify 1840x2208 as portrait
+	 * and 2208x1840 as landscape, which is the two-coin-flip answer this
+	 * replaced.
+	 *
+	 * Compared as w*4 against h*5 rather than as a ratio, to stay in Int.
+	 */
+	private const val NEAR_SQUARE_BAND = 4
+	private const val SQUARE_BAND = 5
+
+		/** The card bounds, documented where applyCardScale explains them. */
+		internal const val MAX_CARD_WIDTH_DIVISOR = 10
+		internal const val MIN_CARD_WIDTH_DIVISOR = 22
+		internal const val MAX_CARD_HEIGHT_DIVISOR = 4
+		internal const val MIN_CARD_HEIGHT_DIVISOR = 26
 	}
 }

@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.16 (`versionCode` 1004016) |
+| Current version | 1.4.17 (`versionCode` 1004017), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -384,7 +384,11 @@ rely on `ANDROID_HOME`.
 `app/src/androidTest` the instrumented one (`gradle connectedAndroidTest`, which
 needs a device or emulator). A tracked `Jenkinsfile` runs both: unit tests, lint,
 `assembleDebug`, `verifyVersionCode`, `assembleRelease`, then
-`connectedAndroidTest` on a headless emulator at API 34, 35 and 36.
+`connectedDebugAndroidTest` on a headless emulator at API 34, 35 and 36.
+
+The suite runs on the JVM with Robolectric, which means **it can be run without an
+emulator**. `GameTableLayoutTest` in particular needs nothing but a measure spec and
+a layout call, and covers window shapes no emulator in the matrix has.
 
 `verifyVersionCode` is the versioning gate described under
 [Credits and history](#credits-and-history): it fails the build when
@@ -616,6 +620,66 @@ Three behavioral changes came with the retarget:
 > its own title bar. Content padding alone cannot inset a framework title bar, and the
 > old title ("Hot Death settings") is the activity's own label. Revert that one
 > attribute if you would rather keep the title bar and accept the overlap.
+
+### Foldables and the table layout
+
+The table is laid out entirely from the window: `GameTable.onSizeChanged` recomputes
+all four seats, both piles, the direction colour, the four player indicators, the card
+badges, the score text, the emoticons, the toast anchor and the winning banner out of
+`w` and `h`. Two things about that were wrong until 1.4.17, both recorded in
+[#13](https://github.com/smccloud/Hot-Death-Uno/issues/13).
+
+**The cards were not part of it.** `m_cardWidth` and `m_cardHeight` are the card
+bitmap's dimensions, taken from the resource density — 52×80 at mdpi, 77×120 at hdpi,
+103×160 at xhdpi — and were never rescaled, so the arrangement scaled with the window
+while the cards inside it did not. Cards are now clamped to the window: between a
+twenty-second and a tenth of its width, and between a twenty-sixth and a quarter of
+its height. That range is chosen so **every phone this app has shipped on is
+untouched** (1080×1920 is still 52, 77 and 103 pixels by density) and only the
+windows the density got wrong for move.
+
+The effect on how many cards fit, which is the honest cost:
+
+| Density | Window | Card | `m_maxCardsDisplay` |
+|---|---|---|---|
+| mdpi | 1080×1920 | 52×80 | 30 (unchanged) |
+| mdpi | 2208×1840 | 100×154 | 28 (was 59) |
+| mdpi | 2560×1600 | 116×179 | 23 (was 57) |
+| xhdpi | 1080×1920 | 103×160 | 14 (unchanged) |
+| xhdpi | 2560×1600 | 116×181 | 23 (was 27) |
+
+Filling the table costs card count, and the limit is now high enough that reaching it
+takes a hand of 28 — a quarter of a two-deck deck drawn without playing anything. A
+normal hand is 7 to 12. Past the limit the hand is clamped and scrollable, not
+truncated.
+
+**The orientation test could not fire.** It was `if (h < 4.5 * m_cardHeight)`, and
+`m_cardHeight` comes from the *resource density*, so the threshold was 360, 540 or
+720 pixels of window height depending on the device. No phone or foldable window is
+that short, in either orientation, at any density — so there was no landscape layout
+in practice, and an unfolded foldable got the portrait pile arrangement. Only
+900×700 and below reached it, which is the one case where a landscape arrangement is
+least useful. It is an aspect ratio now.
+
+A book-style foldable unfolded is near-square *whichever way it is held* — 2208×1840
+one way, 1840×2208 the other, ratios of 1.20 and 0.83 — so near-square is its own
+arrangement rather than a coin flip between the other two, and it is placed like
+landscape. The same layout is now chosen whichever way you hold the device.
+
+**Not done: the hinge.** In landscape a book-style fold puts a vertical crease down
+the middle of the canvas and the human's hand is centred on `w/2`, so the hand and
+the winning banner are drawn across it. Moving them is a small change —
+`m_ptSeat[SEAT_SOUTH].x` and the four things derived from it — but there is **no
+platform inset type for a fold**. `WindowInsets.Type.displayCutout()` is notches and
+punch-holes, and is already handled; a `FoldingFeature` reaches the app only through
+`androidx.window`. So this would be the first AndroidX dependency in main source, on a
+project that has none on purpose, and it is left open as a decision about the project
+rather than about the layout. In portrait the crease is horizontal and above the
+bottom seat, so portrait needs nothing today.
+
+`GameTableLayoutTest` covers all of this without a device, and would cover
+[#14](https://github.com/smccloud/Hot-Death-Uno/issues/14) from the tablet side
+unchanged.
 
 ### Deprecated APIs
 

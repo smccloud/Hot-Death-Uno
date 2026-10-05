@@ -841,3 +841,97 @@ Version 1.4.16               2026-10-05
  - 229 unit tests plus 9 instrumented. No behaviour was added or removed here --
    every rewritten path was already covered, which is the claim the eight new tests
    are there to check
+
+
+Version 1.4.17               unreleased
+
+ - the table now scales with the window, for the first time. GameTable's
+   arrangement has always been window-relative -- all four seats, both piles, the
+   direction colour and the four player indicators are computed from w and h -- but
+   the cards inside it were the card bitmap's dimensions at the device's density
+   and nothing else, for the life of the process. Issue #13
+
+ - the orientation test was comparing the window against a number that had nothing
+   to do with the window. `if (h < 4.5 * m_cardHeight)`, where m_cardHeight is the
+   card bitmap's height: 80px at mdpi, 120 at hdpi, 160 at xhdpi. So the threshold
+   was 360, 540 or 720 pixels of window height, and no phone or foldable window is
+   that short in either orientation at any density in res/ -- the landscape branch
+   could not fire for any real device. Only 900x700 and below reached it, which is
+   the one case where a landscape arrangement is least useful. It is an aspect
+   ratio now, which is what makes the foldable's own shape reachable at all
+
+ - near-square is its own arrangement, because a book-style foldable unfolded is
+   near-square whichever way it is held: 2208x1840 one way and 1840x2208 the other,
+   ratios of 1.20 and 0.83. A tenth either side of square would call one portrait
+   and the other landscape, so the same device changes layout when you turn it. The
+   band is a quarter either side, and it is placed like landscape
+
+ - cards are clamped to the window rather than scaled to it. Two-sided: a card is
+   between 1/22 and 1/10 of the window's width and between 1/26 and 1/4 of its
+   height. That leaves every phone this app has shipped on exactly where it was --
+   52px at mdpi, 77 at hdpi, 103 at xhdpi on 1080x1920 -- and moves only the
+   windows the density got wrong for. The bounds are deliberately chosen so a hand
+   of ten cards spans about the same third of the width at any window size and any
+   density, which is the thing that was never true before
+
+     density  window      card        m_maxCardsDisplay
+     mdpi     1080x1920   52x80       30   (unchanged)
+     mdpi     1080x2208   55x85       28   (was 52x80, 30)
+     mdpi     2208x1840   100x154     28   (was 52x80, 59)
+     mdpi     2560x1600   116x179     23   (was 52x80, 57)
+     xhdpi    1080x1920   103x160     14   (unchanged)
+     xhdpi    2560x1600   116x181     23   (was 103x160, 27)
+     xhdpi    900x700     90x140      10   (was 103x160)
+
+ - and the trade, stated plainly rather than buried: filling the table costs cards
+   that fit. At mdpi on 2208x1840 the card goes from 52px to 100px and
+   m_maxCardsDisplay from 59 to 28. Reaching the new limit takes a hand of 28,
+   which is a quarter of a two-deck deck drawn without playing anything; a normal
+   hand is 7 to 12 and a bad one is rarely more than 20. Past the limit the hand is
+   clamped and scrollable, which #13 already calls annoying rather than broken.
+   The alternative is 59 cards of 52px on a 2208px canvas, which is the sparse
+   table the issue is about
+
+ - cards are rescaled from the originals decoded in initCards, never from the
+   copies already on the table, so folding and unfolding cannot resample the art
+   three times over. GameTableLayoutTest asserts that at the pixel level, which is
+   the only level it is visible at: a bitmap scaled from a copy is the same *size*
+   as one scaled from the original, and an earlier version of that test passed
+   against code doing exactly the wrong thing
+
+ - GameTableLayoutTest, 11 tests, 240 unit. There was no layout test at all, so
+   none of the above could be checked without a device, and #13 and #14 both
+   needed one written. It lays a real GameTable out over ten windows -- three
+   phone densities, a cover screen, unfolded both ways, a tablet both ways and the
+   small window -- and asserts invariants rather than pixels: every anchor point
+   inside its window, at least one card fitting, the hand inside the window, the
+   card within its bounds, the arrangement matching the shape of the window, a
+   resize re-laying out without disturbing the round, and no resampling across a
+   chain of resizes. It serves #14 unchanged, which was the argument for writing
+   it once
+
+ - each of the four behaviours was checked by breaking it on purpose. An
+   arrangement that ignores the window fails three tests; a clamp that never fires
+   fails the bounds test; a clamp that only shrinks and never grows fails the same
+   one, which is the check on the other end of the range; and scaling the drawn
+   copy instead of the original fails the resample test and nothing else
+
+ - NOT done: hinge awareness. A book-style fold in landscape puts a vertical crease
+   down the middle of the canvas and the human's hand is centred on w/2, so the
+   hand and the winning banner are drawn across it. Moving them is small -- it is
+   m_ptSeat[SEAT_SOUTH].x and the four things derived from it -- and there is no
+   platform inset type for a fold: WindowInsets.Type.displayCutout() is notches and
+   punch-holes, and it is already handled. A FoldingFeature reaches the app only
+   through androidx.window, so this item means the first AndroidX dependency in
+   main source, on a project that says "the app itself is framework-only". That is
+   a decision about the project rather than about the layout and it is left open,
+   which is what #13 says should happen. In portrait the crease is horizontal and
+   sits above the bottom seat, so portrait needs nothing today
+
+ - NOT done: a foldable in the emulator matrix. avdmanager offers 6.7in, 7.6in and
+   8in Foldable and the matrix passes no -d, so every level is the default phone
+   profile; adding one as a full matrix entry would add an emulator boot to every
+   build for a narrow case. The Robolectric test is much cheaper, and it also
+   covers the tablet and small-window shapes a foldable emulator would not
+
+ - test count is 240 unit plus 9 instrumented

@@ -5,7 +5,6 @@ import android.app.Dialog
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Insets
-import android.preference.PreferenceManager
 import android.os.Bundle
 import android.view.View
 import android.view.View.OnClickListener
@@ -15,65 +14,105 @@ import android.text.method.ScrollingMovementMethod
 
 class Main : Activity(), OnClickListener
 {
-	@Deprecated("Deprecated in Java")
-	override fun onCreateDialog(id: Int): Dialog?
+	/**
+	 * The dialog currently on screen, if any.
+	 *
+	 * Held only so a second dialog replaces the first and so onDestroy can
+	 * dismiss it. `Activity.showDialog` used to do both -- it cached the dialog
+	 * it built from onCreateDialog and dismissed the lot when the activity went
+	 * away -- and it was deprecated in API 13. Building the dialog here instead
+	 * means the reference is this field, so both halves have to be explicit.
+	 */
+	private var m_dialog: Dialog? = null
+
+	/**
+	 * Builds and shows one of the two informational dialogs.
+	 *
+	 * What `showDialog` + `onCreateDialog` + `onPrepareDialog` did, in one pass:
+	 * inflate the layout, then set the title and the text. The order is the same
+	 * (content view first, then the title, then the text), which is what
+	 * onPrepareDialog relied on to find R.id.text.
+	 */
+	private fun showInfoDialog (id: Int)
 	{
-		var dlg: Dialog? = null
+		val dlg = Dialog(this)
+
 		when (id)
 		{
 			DIALOG_ABOUT ->
 			{
-				dlg = Dialog(this)
-				dlg!!.setContentView(R.layout.dlg_about)
+				dlg.setContentView(R.layout.dlg_about)
+				dlg.setTitle(this.getString(R.string.dlg_about_title))
+
+				// Null rather than the raw template: the template carries a %s,
+				// and the original code on a failure here never called setText at
+				// all, leaving the body of the dialog empty. Showing the
+				// unformatted string instead would put a literal "%s" on screen,
+				// which is the one outcome neither of those is.
+				val text = aboutText()
+				if (text != null)
+				{
+					dlg.setInfoText(text)
+				}
 			}
 			DIALOG_HELP ->
 			{
-				dlg = Dialog(this)
-				dlg!!.setContentView(R.layout.dlg_help)
+				dlg.setContentView(R.layout.dlg_help)
+				dlg.setTitle(this.getString(R.string.dlg_help_title))
+				dlg.setInfoText(this.getString(R.string.dlg_help_text))
 			}
 		}
 
-		return dlg
+		m_dialog?.dismiss()
+		m_dialog = dlg
+		dlg.show()
 	}
 
-	@Deprecated("Deprecated in Java")
-	override fun onPrepareDialog(id: Int, d: Dialog)
+	/**
+	 * Points the dialog's text view at a string and makes it scrollable.
+	 *
+	 * Both dialogs share one layout shape, so this is the half of the two
+	 * onPrepareDialog branches that never differed. A format string with no
+	 * arguments is passed through untouched: `getString` with no arguments
+	 * returns the template, specifiers and all, which is how the help text is
+	 * loaded and why the about text has to be formatted by hand.
+	 */
+	private fun Dialog.setInfoText (text: String)
 	{
-		val text: TextView
-		when (id)
+		val view = findViewById<TextView>(R.id.text)
+		view.setMovementMethod(ScrollingMovementMethod.getInstance())
+		view.setText(text)
+	}
+
+	/**
+	 * The about text with the running version substituted into it, or null if the
+	 * version could not be read.
+	 *
+	 * The version comes from the package manager, which throws if the package has
+	 * gone missing underneath us. The original swallowed that and left the text
+	 * view empty, so a failure here produces an empty dialog rather than a
+	 * crash or a template with a %s still in it -- see the caller.
+	 */
+	private fun aboutText (): String?
+	{
+		val text = this.getString(R.string.dlg_about_text)
+
+		try
 		{
-			DIALOG_ABOUT ->
-			{
-				d.setTitle(this.getString(R.string.dlg_about_title));
-
-				text = d.findViewById<TextView>(R.id.text)
-				text.setMovementMethod(ScrollingMovementMethod.getInstance())
-
-				try
-				{
-					val app_ver = packageManager.getPackageInfo(packageName, 0).versionName
-					var str_about = this.getString(R.string.dlg_about_text)
-
-					str_about = String.format(str_about, app_ver)
-					text.setText(str_about)
-				}
-				catch (e: Exception)
-				{
-
-				}
-
-			}
-
-			DIALOG_HELP ->
-			{
-				d.setTitle(this.getString(R.string.dlg_help_title));
-
-				text = d.findViewById<TextView>(R.id.text)
-				text.setMovementMethod(ScrollingMovementMethod.getInstance())
-				text.setText(this.getString(R.string.dlg_help_text));
-
-			}
+			val app_ver = packageManager.getPackageInfo(packageName, 0).versionName
+			return String.format(text, app_ver)
 		}
+		catch (e: Exception)
+		{
+			return null
+		}
+	}
+
+	override fun onDestroy()
+	{
+		m_dialog?.dismiss()
+		m_dialog = null
+		super.onDestroy()
 	}
 
 	/** Called when the activity is first created. */
@@ -114,7 +153,7 @@ class Main : Activity(), OnClickListener
 		val continueButton = findViewById<View>(R.id.btn_continue)
 		continueButton.setOnClickListener(this);
 
-		val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+		val prefs = Prefs.defaultSharedPreferences(this)
 		val s = prefs.getString("gamestate", "")
 
 		// `==` on a String?, which is a value comparison in Kotlin. The Java used
@@ -155,10 +194,10 @@ class Main : Activity(), OnClickListener
 			startActivity (Intent (this, Prefs::class.java))
 
 		} else if (id == R.id.btn_help) {
-			this.showDialog(DIALOG_HELP)
+			showInfoDialog(DIALOG_HELP)
 
 		} else if (id == R.id.btn_about) {
-			this.showDialog(DIALOG_ABOUT)
+			showInfoDialog(DIALOG_ABOUT)
 
 		} else if (id == R.id.btn_exit) {
 			finish();

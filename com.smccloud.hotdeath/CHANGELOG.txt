@@ -753,3 +753,81 @@ Version 1.4.15               2026-10-02
    EveryOtherDrawCard and the clause by aDrawTwoInHandKeepsItsVictimInTheTurn
 
  - test count is 221 unit plus 9 instrumented
+
+
+Version 1.4.16               unreleased
+
+ - 106 deprecation warnings off the build, and one of them was not cosmetic.
+   Every one of these is an Android API deprecated in 29, 30 or 33 that the app
+   was still calling, and the compiler had been saying so on every build since
+   the retarget. Nothing was broken, which is exactly why it was worth doing
+   while the log was still in front of us
+
+ - PreferenceManager.getDefaultSharedPreferences, 31 call sites across Prefs,
+   GameActivity, Main and nine test files, replaced by Prefs.defaultSharedPreferences.
+   Same file: that method was itself getSharedPreferences(packageName +
+   "_preferences", MODE_PRIVATE), so the name is kept as a constant in one place
+   and an existing install keeps every setting it has. This is the change that
+   had teeth -- a different file name is not an error, it is an empty one, so
+   every setting a user had changed would have read back as its default and
+   their saved game would have disappeared
+
+ - PreferenceManager.setDefaultValues, replaced by applyDefaultValues in Prefs:
+   walk preferences.xml, write android:defaultValue for every key not already in
+   the file. Per-key rather than the framework's one-per-file marker key, so a
+   preference added to the XML after first launch now gets its default instead of
+   silently reading back as whatever the file happens not to hold
+
+ - Activity.showDialog, deprecated since API 13, gone from Main along with the
+   onCreateDialog and onPrepareDialog overrides that only existed to serve it.
+   The dialogs are built where they are shown instead. The one behaviour worth
+   naming: the about dialog's version string is read from the package manager
+   inside a swallowed catch, and on failure the original left the body empty
+   rather than showing the unformatted template with a %s in it. That is kept --
+   showing a literal %s to a player would be worse than an empty dialog
+
+ - Resources.getColor(int), deprecated in API 23, four calls in GameTable, now
+   the theme-aware overload. Handler(), deprecated in API 30, now
+   Handler(Looper.getMainLooper()) -- same looper, said out loud
+
+ - the card-help haptic tick moved to the only vibrate overload that is not
+   deprecated at any API level: VibrationEffect.createOneShot through
+   VibratorManager with VibrationAttributes. vibrate(long) went in API 26,
+   vibrate(VibrationEffect) in API 33, and this is the VibrationAttributes form
+   that replaced it. Same 100ms at default amplitude, USAGE_TOUCH
+
+ - android.preference is *not* migrated. PreferenceActivity, ListPreference,
+   EditTextPreference and the PreferenceScreen walk in Prefs.initSummary were
+   deprecated in API 29 and the only supported replacement is androidx.preference,
+   which would put a dependency on a project that deliberately has none -- the
+   same call made for WindowInsetsCompat at the API 36 retarget. So those warnings
+   are suppressed on the class, with the reason written down next to the
+   annotation. The screen works and it is the only settings UI in the app
+
+ - five of the six @LooperMode(LEGACY) test annotations are now PAUSED, which is
+   Robolectric 4.x's default. Nothing in those five was waiting on a posted
+   runnable: the Robolectric test thread *is* the main thread, so runOnUiThread
+   runs its Runnable inline rather than posting it, and that is why the toast
+   assertions in CardPlayMessageTest and MalformedSaveTest still see their toast.
+   Each one says why in a comment rather than relying on the default
+
+ - GameRoundLoopTest stays on LEGACY, and the suppression is documented rather
+   than removed. Commit 22486f4 measured it: in PAUSED "the redraws defer and the
+   run did not finish inside seven" [minutes], because the loop is driven from
+   the test thread and every RedrawTable is then a frame that has not happened by
+   the time the next line reads the table. Moving it means idling the looper
+   inside the loop, which changes the test's shape and its five-minute runtime --
+   its own commit, not a drive-by
+
+ - PrefsDefaultValuesTest, 8 tests, 229 unit. The settings screen had no coverage
+   at all, and the replacement for setDefaultValues is the one piece of that code
+   that can destroy a user's settings without throwing anywhere -- a missing guard
+   would put game_speed back to 1 and novice_mode back to false the next time
+   somebody opened Settings. The tests pin all thirteen keys, the type each default
+   is stored as (getBoolean cannot tell a seeded false from an absent key, so the
+   checkboxes are asserted on `all` instead), that a value the user changed
+   survives, that a removed key comes *back*, and that a second pass writes nothing
+
+ - 229 unit tests plus 9 instrumented. No behaviour was added or removed here --
+   every rewritten path was already covered, which is the claim the eight new tests
+   are there to check

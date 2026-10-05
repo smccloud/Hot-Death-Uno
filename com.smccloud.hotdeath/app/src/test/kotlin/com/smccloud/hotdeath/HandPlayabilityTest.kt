@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -73,7 +72,7 @@ class HandPlayabilityTest
 
 	private fun standardRules (on: Boolean)
 	{
-		PreferenceManager.getDefaultSharedPreferences(m_activity)
+		Prefs.defaultSharedPreferences(m_activity)
 			.edit()
 			.putString("cheat_code", if (on) "standardrules" else "")
 			.commit()

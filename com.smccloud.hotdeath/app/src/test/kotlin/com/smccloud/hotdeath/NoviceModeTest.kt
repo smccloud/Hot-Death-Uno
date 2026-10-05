@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -38,7 +37,14 @@ import org.robolectric.annotation.LooperMode
  * asserting it is still blocked, so a test cannot pass by the wait never having
  * started.
  */
-@LooperMode(LooperMode.Mode.LEGACY)
+// PAUSED, which is the Robolectric 4.x default. This is the one test in the
+// suite with work on a thread the looper does not own -- the waits run on a
+// background thread, as the thing under test blocks -- and the one behavioural
+// difference that makes: Game.promptUser posts its toast with runOnUiThread, so
+// in PAUSED that post is queued and never runs. No assertion here reads a toast,
+// and the flag each assertion does read (m_waitingToAdvance) is set by the game
+// thread itself rather than by the post, so nothing has to idle the looper.
+@LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class NoviceModeTest
@@ -67,7 +73,7 @@ class NoviceModeTest
 
 	private fun noviceMode (on: Boolean)
 	{
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putBoolean("novice_mode", on)
@@ -99,7 +105,7 @@ class NoviceModeTest
 	@Test
 	fun noviceModeIsOffByDefault ()
 	{
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.remove("novice_mode")

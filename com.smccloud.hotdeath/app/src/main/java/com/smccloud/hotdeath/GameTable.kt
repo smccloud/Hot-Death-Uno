@@ -1,6 +1,10 @@
 package com.smccloud.hotdeath
 
 import android.os.Handler
+import android.os.Looper
+import android.os.VibrationAttributes
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import android.util.Log
 
 import android.app.AlertDialog
@@ -120,7 +124,13 @@ class GameTable private constructor(context: Context) : View(context)
 	private var m_readyToStartGame = false
 	private var m_waitingToStartGame = false
 
-	private val m_handler = Handler()
+	// Looper.getMainLooper() rather than the no-arg constructor, deprecated in
+	// API 30. That one picks up whichever looper the constructing thread happens
+	// to have, which is the main looper here only because the table is built on
+	// the UI thread -- and every one of these callbacks touches views, so a
+	// second thread's looper would be a deadlock rather than a warning. Naming
+	// it says that out loud instead of leaving it to the constructor argument.
+	private val m_handler = Handler(Looper.getMainLooper())
 
 	private var m_toast: android.widget.Toast? = null
 
@@ -191,22 +201,27 @@ class GameTable private constructor(context: Context) : View(context)
 
 		val scale = context.resources.displayMetrics.density
 
+		// The theme-aware Resources.getColor(int, Theme) rather than the
+		// single-argument one, deprecated in API 23. Same answer for a plain
+		// colour in a plain theme, and it is the overload every other API level
+		// from 23 up has, so there is no version check to write. All four below
+		// pass this view's own theme, which is the activity's.
 		m_paintTable = Paint()
-		m_paintTable.setColor(resources.getColor(R.color.table_background))
+		m_paintTable.setColor(resources.getColor(R.color.table_background, theme))
 
 		m_paintTableText = Paint(Paint.ANTI_ALIAS_FLAG)
-		m_paintTableText.setColor(resources.getColor(R.color.table_text))
+		m_paintTableText.setColor(resources.getColor(R.color.table_text, theme))
 		m_paintTableText.setTextAlign(Paint.Align.CENTER)
 		m_paintTableText.setTextSize(12 * scale)
 		m_paintTableText.setTypeface(Typeface.DEFAULT)
 
 		m_paintScoreText = Paint(Paint.ANTI_ALIAS_FLAG)
-		m_paintScoreText.setColor(resources.getColor(R.color.score_text))
+		m_paintScoreText.setColor(resources.getColor(R.color.score_text, theme))
 		m_paintScoreText.setTextSize(12 * scale)
 		m_paintScoreText.setTypeface(Typeface.DEFAULT_BOLD)
 
 		m_paintCardBadgeText = Paint(Paint.ANTI_ALIAS_FLAG)
-		m_paintCardBadgeText.setColor(resources.getColor(R.color.card_badge_text))
+		m_paintCardBadgeText.setColor(resources.getColor(R.color.card_badge_text, theme))
 		m_paintCardBadgeText.setTextAlign(Paint.Align.CENTER)
 		m_paintCardBadgeText.setTextSize(14 * scale)
 		m_paintCardBadgeText.setTypeface(Typeface.DEFAULT_BOLD)
@@ -420,8 +435,24 @@ class GameTable private constructor(context: Context) : View(context)
 			return
 		}
 
-		val v = context.getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
-		v.vibrate (100)
+		// A haptic tick on a long-press of a face-up card.
+		//
+		// VibrationEffect.createOneShot rather than Vibrator.vibrate(long), and
+		// the VibratorManager service rather than the VIBRATOR_SERVICE string
+		// constant: both of those are deprecated (API 26 and API 26
+		// respectively), as is Vibrator.vibrate(VibrationEffect) on its own
+		// (API 33). The overload used here takes a VibrationAttributes, which is
+		// what API 33 onwards expects to be told, so it is the one call on this
+		// object that is not deprecated at any level. USAGE_TOUCH says what it
+		// already was: the device's own haptic feedback for a touch, and what
+		// the system would have used without any attributes at all.
+		//
+		// 100ms and full amplitude are the old defaults from
+		// vibrator.vibrate(long), so the tick is unchanged.
+		val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
+		vibrator.vibrate (
+			VibrationEffect.createOneShot (100, VibrationEffect.DEFAULT_AMPLITUDE),
+			VibrationAttributes.createForUsage (VibrationAttributes.USAGE_TOUCH))
 		ShowCardHelp(c)
 		}
 	}

@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -69,7 +68,7 @@ class PenaltyRulesTest
 
 	private fun standardRules (on: Boolean)
 	{
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putString("cheat_code", if (on) "standardrules" else "")

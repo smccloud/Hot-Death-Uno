@@ -1,7 +1,6 @@
 package com.smccloud.hotdeath
 
 import android.content.Context
-import android.preference.PreferenceManager
 import android.view.View
 import android.widget.Button
 import androidx.test.core.app.ApplicationProvider
@@ -58,6 +57,22 @@ import org.robolectric.annotation.LooperMode
  * the round ends. Run often enough, the shuffles reach card rules that the
  * fixed-deck tests cannot.
  */
+// LEGACY, which Robolectric has deprecated, and this is the one test in the
+// suite that has to stay on it. Measured rather than assumed: commit 22486f4
+// ("Cover the round loop with GameRoundLoopTest") recorded that in PAUSED "the
+// redraws defer and the run did not finish inside seven" [minutes]. The reason
+// is the fixture above -- the loop is driven from the test thread, so every
+// RedrawTable is a deferred frame rather than one that has already happened by
+// the time the next line reads the table, and the game never finishes.
+//
+// Dropping it means idling the looper as the loop goes, not just at the end:
+// something like shadowOf(getMainLooper()).idleFor(Duration.ofSeconds(1))
+// after each startGame/advanceRound call. That is a real change to the test's
+// shape and its runtime, so it is a piece of work with its own commit rather
+// than a drive-by deprecation fix -- and until somebody does it, the annotation
+// below is the honest way to keep a known-good test honest about why it is
+// different from its neighbours.
+@Suppress("DEPRECATION")
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(RobolectricTestRunner::class)
 class GameRoundLoopTest
@@ -413,7 +428,7 @@ class GameRoundLoopTest
 	{
 		val app: Context = ApplicationProvider.getApplicationContext()
 
-		PreferenceManager.getDefaultSharedPreferences(app)
+		Prefs.defaultSharedPreferences(app)
 			.edit()
 			.putBoolean("computer_4th", true)
 			.putBoolean("face_up", false)

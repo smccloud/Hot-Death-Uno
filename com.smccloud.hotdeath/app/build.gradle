@@ -247,7 +247,7 @@ if (hasReleaseKeystore) {
 // as current as the last person to remember to update it, and by 1.4.5 it was
 // describing a test-count scheme that had been abandoned at 1.4.0 and had never
 // matched the real counts anyway. See #12.
-def appVersion = '1.4.15'
+def appVersion = '1.4.16'
 
 def appVersionParts = appVersion.tokenize('.')
 if (appVersionParts.size() != 3 || !appVersionParts.every { it ==~ /\d+/ }) {

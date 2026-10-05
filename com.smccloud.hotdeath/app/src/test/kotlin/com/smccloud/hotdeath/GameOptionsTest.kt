@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,7 +37,7 @@ class GameOptionsTest
 
 	private fun putString (key: String, value: String)
 	{
-		PreferenceManager.getDefaultSharedPreferences(m_activity)
+		Prefs.defaultSharedPreferences(m_activity)
 			.edit()
 			.putString(key, value)
 			.commit()
@@ -46,7 +45,7 @@ class GameOptionsTest
 
 	private fun putBoolean (key: String, value: Boolean)
 	{
-		PreferenceManager.getDefaultSharedPreferences(m_activity)
+		Prefs.defaultSharedPreferences(m_activity)
 			.edit()
 			.putBoolean(key, value)
 			.commit()

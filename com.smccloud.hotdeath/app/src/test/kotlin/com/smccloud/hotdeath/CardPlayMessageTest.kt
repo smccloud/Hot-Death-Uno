@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import android.view.View
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -48,7 +47,14 @@ import org.robolectric.shadows.ShadowToast
  * play; `Game.runRound` does both, and it is not called here. So nothing races
  * the assertions, and the card under test is still in the hand afterwards.
  */
-@LooperMode(LooperMode.Mode.LEGACY)
+// PAUSED, which is the Robolectric 4.x default. The mode matters here only
+// because the toast has to arrive, and it arrives for a reason that has nothing
+// to do with the looper: the test thread *is* the main thread under
+// Robolectric, and Activity.runOnUiThread runs its Runnable inline when it is
+// already on the UI thread rather than posting it. So GameTable.Toast is called
+// synchronously from turnDecisionPlayCard, and ShadowToast has it by the time
+// the assertion runs.
+@LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CardPlayMessageTest
@@ -61,7 +67,7 @@ class CardPlayMessageTest
 	{
 		ShadowToast.reset()
 
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putBoolean("computer_4th", true)

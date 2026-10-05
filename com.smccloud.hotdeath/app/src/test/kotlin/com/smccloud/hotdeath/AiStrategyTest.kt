@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -234,7 +233,7 @@ class AiStrategyTest
 			else -> "p3"
 		}
 
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putString("${pair}_skill", skill.toString())

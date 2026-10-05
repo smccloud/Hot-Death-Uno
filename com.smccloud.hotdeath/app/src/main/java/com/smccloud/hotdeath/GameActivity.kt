@@ -8,7 +8,6 @@ import android.content.res.Configuration
 import android.app.Dialog
 import android.graphics.Insets
 import android.os.Bundle
-import android.preference.PreferenceManager
 import android.widget.GridView
 import android.widget.AdapterView
 import android.view.View
@@ -88,7 +87,7 @@ class GameActivity : Activity()
 		var unreadableSave = false
 		if (startup_mode == STARTUP_MODE_CONTINUE)
 		{
-			val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+			val prefs = Prefs.defaultSharedPreferences(this)
 			// Nullable because getString is @Nullable, exactly as it was in Java.
 			// JSONObject's constructor takes a platform String!, so a null here
 			// NPEs out of the constructor rather than being caught below -- which
@@ -291,7 +290,7 @@ class GameActivity : Activity()
 		m_game!!.pause();
 		val gamestate = m_game!!.getSnapshot()
 
-		val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+		val prefs = Prefs.defaultSharedPreferences(this)
 		val editor = prefs.edit();
 		editor.putString("gamestate", gamestate);
 		editor.commit();

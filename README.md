@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.15 (`versionCode` 1004015) |
+| Current version | 1.4.16 (`versionCode` 1004016), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -609,6 +609,44 @@ Three behavioral changes came with the retarget:
 > its own title bar. Content padding alone cannot inset a framework title bar, and the
 > old title ("Hot Death settings") is the activity's own label. Revert that one
 > attribute if you would rather keep the title bar and accept the overlap.
+
+### Deprecated APIs
+
+The app still uses a handful of APIs that Android has deprecated, in two quite
+different categories. 1.4.16 cleared out everything that had a framework
+replacement; what is left is deliberate and says so at the point of use.
+
+**Replaced** (nothing left to know about these):
+
+| Was | Deprecated | Now |
+|---|---|---|
+| `PreferenceManager.getDefaultSharedPreferences` | API 29 | `Prefs.defaultSharedPreferences` |
+| `PreferenceManager.setDefaultValues` | API 29 | `Prefs.applyDefaultValues`, walking `preferences.xml` |
+| `Activity.showDialog` + `onCreateDialog`/`onPrepareDialog` | API 13 | dialogs built in `Main.showInfoDialog` |
+| `Resources.getColor(int)` | API 23 | `Resources.getColor(int, Theme)` |
+| `new Handler()` | API 30 | `Handler(Looper.getMainLooper())` |
+| `Vibrator.vibrate(long)` | API 26 | `VibrationEffect` via `VibratorManager` + `VibrationAttributes` |
+| `@LooperMode(LEGACY)` | Robolectric | `@LooperMode(PAUSED)` in five of six tests |
+
+The `SharedPreferences` file name matters more than it looks.
+`getDefaultSharedPreferences` was `getSharedPreferences(packageName +
+"_preferences", MODE_PRIVATE)`, so `Prefs.defaultSharedPreferences` spells that
+out — a different name is not an error, it is a *different, empty* file, and
+every setting a user had changed would read back as its default.
+
+**Kept, with the warning suppressed:** the whole settings screen. `Prefs` extends
+`android.preference.PreferenceActivity` and uses `ListPreference`,
+`EditTextPreference` and `PreferenceScreen`, all deprecated in API 29. The only
+supported replacement is `androidx.preference`, which would put a third-party
+dependency on a project that deliberately has none — the same call made for
+`WindowInsetsCompat` above. The suppression is on the class, with this reasoning
+next to it.
+
+Also kept: `GameRoundLoopTest`'s `@LooperMode(LEGACY)`. In `PAUSED` the redraws
+defer and the run does not finish (measured in commit `22486f4`), because the
+loop is driven from the test thread and every `RedrawTable` is then a frame that
+has not happened by the time the next line reads the table. Moving it means
+idling the looper *inside* the loop.
 
 ### Known bugs
 

@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import org.json.JSONArray
 import org.json.JSONException
@@ -48,7 +47,11 @@ import org.robolectric.shadows.ShadowToast
  * exactly which key is missing. The well-formed case goes through
  * [Game.toJSON] so it cannot drift from what the app actually writes.
  */
-@LooperMode(LooperMode.Mode.LEGACY)
+// PAUSED, which is the Robolectric 4.x default. The unreadable-save toast is
+// asserted here, and it is made and shown directly inside GameActivity.onCreate
+// rather than posted, so it is on ShadowToast before onCreate returns. Nothing
+// else in this test touches the looper: no game thread is ever started.
+@LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(RobolectricTestRunner::class)
 class MalformedSaveTest
 {
@@ -67,7 +70,7 @@ class MalformedSaveTest
 		// default SharedPreferences across the whole class. Without this, a test
 		// that ran after aGoodSaveIsResumedAndKept would start from whatever that
 		// one left behind.
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putBoolean("computer_4th", true)
@@ -328,7 +331,7 @@ class MalformedSaveTest
 		// toasts on its own schedule and a reset afterwards would race it.
 		ShadowToast.reset()
 
-		PreferenceManager.getDefaultSharedPreferences (
+		Prefs.defaultSharedPreferences (
 				ApplicationProvider.getApplicationContext())
 			.edit ()
 			.putString ("gamestate", savedState)
@@ -432,7 +435,7 @@ class MalformedSaveTest
 
 		launchContinuing (save.toString())
 
-		val stored = PreferenceManager.getDefaultSharedPreferences (
+		val stored = Prefs.defaultSharedPreferences (
 				ApplicationProvider.getApplicationContext())
 			.getString ("gamestate", "")
 		assertEquals ("the unreadable save should not still be in preferences",
@@ -453,7 +456,7 @@ class MalformedSaveTest
 		assertTrue ("a non-JSON save should be reported the same way",
 				sawToast (unreadableMessage()))
 
-		val stored = PreferenceManager.getDefaultSharedPreferences (
+		val stored = Prefs.defaultSharedPreferences (
 				ApplicationProvider.getApplicationContext())
 			.getString ("gamestate", "")
 		assertEquals ("", stored)
@@ -476,7 +479,7 @@ class MalformedSaveTest
 				sawToast (unreadableMessage()))
 
 		assertNotNull ("the save should still be in preferences",
-				PreferenceManager.getDefaultSharedPreferences (
+				Prefs.defaultSharedPreferences (
 						ApplicationProvider.getApplicationContext())
 					.getString ("gamestate", null))
 	}

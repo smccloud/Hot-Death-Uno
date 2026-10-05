@@ -43,7 +43,11 @@ import org.robolectric.annotation.LooperMode
  * that decides *when* each branch runs is `PenaltyTest` and the instrumented
  * `PenaltyStackTest`, and neither is touched by this release.
  */
-@LooperMode(LooperMode.Mode.LEGACY)
+// PAUSED, which is the Robolectric 4.x default, written out so the choice is a
+// decision on the record rather than an omission. This test formats strings and
+// asserts on them; there is no activity, no thread and no looper anywhere in it,
+// which is why the annotation can be anything at all.
+@LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class PenaltyMessageTest

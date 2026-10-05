@@ -1,6 +1,5 @@
 package com.smccloud.hotdeath
 
-import android.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -32,7 +31,10 @@ import org.robolectric.annotation.LooperMode
  * `preferences.xml`, and a `player4` category title. If someone adds one, the
  * `southReadsNorths` test below fails and says what changed.
  */
-@LooperMode(LooperMode.Mode.LEGACY)
+// PAUSED, which is the Robolectric 4.x default. Nothing here is posted or
+// waited on: the test writes preferences, builds an activity with get() so
+// onCreate never runs, and reads two fields back off the player by reflection.
+@LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ComputerDifficultyTest
@@ -48,7 +50,7 @@ class ComputerDifficultyTest
 	@Before
 	fun setUp ()
 	{
-		PreferenceManager.getDefaultSharedPreferences(
+		Prefs.defaultSharedPreferences(
 			ApplicationProvider.getApplicationContext())
 			.edit()
 			.putString("p1_skill", m_p1[0].toString())

@@ -96,6 +96,23 @@ def panel():
 WORD_Y = {'top': 55, 'bottom': 112, 'mid': 84, 'low': 100}
 
 
+def word_size(word, base=11):
+    """Shrink long labels to fit the panel.
+
+    SVG has no text wrapping and no measuring, so the width is estimated from the
+    character count. That is crude, but the only word that overflowed was
+    "Retaliation", and an estimate is enough to catch it: at 11px in a
+    DejaVu-ish sans the panel's 66px takes about eight characters, and the two
+    labels longer than that are set two steps smaller.
+    """
+    n = len(word)
+    if n <= 8:
+        return base
+    if n <= 11:
+        return base - 2
+    return base - 3
+
+
 def outlined(x, y, s, size, fill, stroke='#1A1A1A', width=2.2):
     """Pale text with a dark outline, drawn in two passes.
 
@@ -364,10 +381,10 @@ def draw_svg(drawable, spec):
     fill = art.get('word_fill', '#FFFFFF')
     if top:
         y = WORD_Y['top'] if slot == 'split' else WORD_Y[slot]
-        body.append(outlined(W / 2.0, y, top, 11, fill))
+        body.append(outlined(W / 2.0, y, top, word_size(top), fill))
     if bottom:
         y = WORD_Y['bottom'] if slot == 'split' else WORD_Y[slot]
-        body.append(outlined(W / 2.0, y, bottom, 11, fill))
+        body.append(outlined(W / 2.0, y, bottom, word_size(bottom), fill))
 
     # -- the big glyph
     if glyph:

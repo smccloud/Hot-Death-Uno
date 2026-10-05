@@ -203,25 +203,31 @@ class GameTable private constructor(context: Context) : View(context)
 
 		// The theme-aware Resources.getColor(int, Theme) rather than the
 		// single-argument one, deprecated in API 23. Same answer for a plain
-		// colour in a plain theme, and it is the overload every other API level
-		// from 23 up has, so there is no version check to write. All four below
-		// pass this view's own theme, which is the activity's.
+		// colour in a plain theme, and it is the overload every API level from 23
+		// up has, so there is no version check to write.
+		//
+		// context.theme rather than a bare `theme`: this is a secondary
+		// constructor's body, and a secondary constructor can see its own
+		// parameters and nothing else of the instance -- `theme` is a View
+		// getter, so it is not in scope. It is the activity's theme either way,
+		// since this constructor is handed the activity's context. Build #125
+		// found that one.
 		m_paintTable = Paint()
-		m_paintTable.setColor(resources.getColor(R.color.table_background, theme))
+		m_paintTable.setColor(resources.getColor(R.color.table_background, context.theme))
 
 		m_paintTableText = Paint(Paint.ANTI_ALIAS_FLAG)
-		m_paintTableText.setColor(resources.getColor(R.color.table_text, theme))
+		m_paintTableText.setColor(resources.getColor(R.color.table_text, context.theme))
 		m_paintTableText.setTextAlign(Paint.Align.CENTER)
 		m_paintTableText.setTextSize(12 * scale)
 		m_paintTableText.setTypeface(Typeface.DEFAULT)
 
 		m_paintScoreText = Paint(Paint.ANTI_ALIAS_FLAG)
-		m_paintScoreText.setColor(resources.getColor(R.color.score_text, theme))
+		m_paintScoreText.setColor(resources.getColor(R.color.score_text, context.theme))
 		m_paintScoreText.setTextSize(12 * scale)
 		m_paintScoreText.setTypeface(Typeface.DEFAULT_BOLD)
 
 		m_paintCardBadgeText = Paint(Paint.ANTI_ALIAS_FLAG)
-		m_paintCardBadgeText.setColor(resources.getColor(R.color.card_badge_text, theme))
+		m_paintCardBadgeText.setColor(resources.getColor(R.color.card_badge_text, context.theme))
 		m_paintCardBadgeText.setTextAlign(Paint.Align.CENTER)
 		m_paintCardBadgeText.setTextSize(14 * scale)
 		m_paintCardBadgeText.setTypeface(Typeface.DEFAULT_BOLD)

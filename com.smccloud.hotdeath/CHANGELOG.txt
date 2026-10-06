@@ -935,3 +935,133 @@ Version 1.4.17               unreleased
    covers the tablet and small-window shapes a foldable emulator would not
 
  - test count is 240 unit plus 9 instrumented
+
+
+Version 1.4.18               unreleased
+
+Issue #14, continuing from 1.4.17. That release did the card sizing, the density
+card-count argument and the aspect-ratio arrangement, which covered four of the
+five sub-items. This does the input model, the last one, and the floor that was
+recommended alongside it.
+
+ - a hand longer than the table can show can now be scrolled with a mouse wheel or
+   a trackpad, which is the one desktop affordance the game did not have. It was
+   drag-only, so a large screen -- which is what #13 and #14 are about -- invited
+   a scroll it offered no way to do but press-and-drag. A trackpad cannot hold a
+   button and move at the same time without being two hands, and a mouse user has to
+   keep the button down for the whole gesture. GameTable.onGenericMotionEvent reads
+   AXIS_VSCROLL and scrolls the hand under the pointer; a scroll over bare table is
+   passed up rather than swallowed, so one over the game's border still reaches
+   whatever is above it. Left click already worked, since a click is a tap, and it
+   is unchanged
+
+ - wheel travel accumulates rather than being truncated per event, so a trackpad
+   works as well as a wheel. A mouse wheel reports a detent at a time and AXIS_VSCROLL
+   is 1.0 for it; a trackpad reports a swipe as a stream of amounts well under one,
+   three or four per cent each. Rounding each event on its own would have thrown
+   away almost every trackpad gesture and left the tail of a swipe unspent. One detent
+   is one card, which is the same granularity as half a card of drag
+
+ - m_maxCardsDisplay has a floor of one. Both candidate layouts in onSizeChanged are
+   integer divisions and both go negative on a window too small for either, and
+   everything downstream is numcards - m_maxCardsDisplay, so zero left the table
+   blank rather than throwing -- the loops over the cards collapsed to empty ones.
+   Issue #14 measured 320x240 at xhdpi reaching exactly zero. Sizing the cards to
+   the window is what takes that out of reach, and the same window now fits ten
+   cards rather than none; this is the belt to those braces, and it is one line
+
+ - GameTableLayoutTest now asserts at the smallest windows the platform can hand
+   the app: 220dp, the minimum freeform or split-screen window size, at all three
+   densities, plus a 320dp tablet split. Not below it, and the boundary was measured
+   rather than assumed -- the smallest square window in which every anchor point
+   fits is 200dp at mdpi and hdpi and 170dp at xhdpi, all below the 220dp the
+   platform will give, so at every density the layout holds together across every
+   window the system can produce. Below that it does not: the direction arrow and the
+   four player indicators are laid out at their own bitmap size, which does not scale
+   with the window the way the cards now do, so a window narrower than that group
+   puts the east indicator past the right edge -- at 320x240 xhdpi its left edge is
+   325. Out of reach, and recorded in #14 rather than fixed, because fixing it means
+   scaling the chrome as well and that is a design pass over every bitmap
+   initCards builds
+
+ - the assertion message for an off-window anchor said "off the left of the window"
+   for a point past the right edge, which sent the reading the wrong way and cost a
+   probe to work out which anchor was meant. It says "outside the window" now
+
+ - bugfix: a second finger could play a card. The touch handler compared
+   event.action, which packs the pointer index into its high bits, so `action ==
+   ACTION_DOWN` and `action == ACTION_UP` were true only for pointer 0's own press
+   and release. A second finger's press and release matched no branch and went to
+   super, which was harmless until the ordering turned it over: one finger resting
+   on a card while a second lands and lifts makes the first finger's release an
+   ACTION_POINTER_UP and the second's a plain ACTION_UP, so the tap handler ran on
+   the tail of a gesture whose start it had never been given -- with the seat and the
+   touch-down point still set from the first finger -- and played the card. Two
+   thumbs on a tablet, or a stylus left resting on the glass, or a hand that shifts
+   while it is held down. There is no two-finger gesture in this game, so a second
+   pointer now disarms the gesture and stays disarmed until everything lifts
+
+ - bugfix: a cancelled drag was committed by the next tap. ACTION_CANCEL took down
+   the long press and nothing else, leaving m_currentDrag holding whatever delta the
+   drag had reached. RedrawHand adds that to the seat's offset on every frame after,
+   so the hand sat shifted for as long as the table was up, and the next tap's
+   ACTION_UP found the stale delta and added it to m_cardoffset as well -- a cancel
+   partway through a drag jumped the hand twice, once on the cancel and once on the
+   next tap
+
+ - the offset bounds are written down once. Two ends of one bound were spelled out in
+   full in RedrawHand and in full in the ACTION_UP arm, and the wheel would have been
+   a third copy; they are clampOffset now, and RedrawHand calls it twice as it
+   always did
+
+ - GameTableInputTest, 15 tests, 255 unit. There was no input test at all, so all of
+   the above was checkable only on a device. It lays out and *draws* a real
+   GameTable over a dealt hand -- the draw matters, because m_handBoundingRect is
+   built in RedrawHand and it is what the wheel and the touch handler hit-test
+   against, so a table that was laid out but never drawn has no hand under the
+   pointer and every one of these tests would pass against an empty one. It asserts
+   the wheel's direction, both ends of its bound, the accumulation, per-seat
+   independence, and that a scroll over a hand is consumed while one over bare table
+   is passed up; then that a single tap plays a card and a two-finger tap does not,
+   that a second finger takes the long press back down, and that a cancelled drag is
+   committed by nothing
+
+ - NOT tested: how far a scroll event actually scrolls it. AXIS_VSCROLL is read out
+   of native device state and a MotionEvent is built out of pointer coordinates, so
+   there is no way to construct a scroll event without a real InputDevice behind it --
+   Robolectric 4.15 has no setter for it. scrollHandBy is internal and is tested
+   directly; the four lines of onGenericMotionEvent that feed it are read, not
+   exercised, and what is reachable of it -- the seat it resolves and whether it
+   claims the event -- is tested through the event
+
+ - NOT tested: that a real two-finger event lands on the same branch. The public
+   MotionEvent.obtain takes one pointer and the overload that takes both is @hide, so
+   the pointer tests send single-pointer events carrying ACTION_POINTER_DOWN and
+   ACTION_POINTER_UP. The handler dispatches on actionMasked and neither branch reads
+   pointerCount or any pointer but the first, so it reaches the same code -- but
+   what shows the platform's real event goes there is the one line that changed
+
+ - each behaviour was checked by breaking it on purpose. The pre-fix pointer handling
+   fails the two-finger tests and nothing else; a wheel handler that ignores the
+   event, or that claims every one whatever is under the pointer, fails the dispatch
+   test; no accumulation, or the wrong sign, fails six; no clamp fails four; and a
+   cancel that leaves the drag set fails the cancelled-drag test
+
+ - NOT done, and deliberately: the keyboard. The game is tap and long-press
+   throughout, so a keyboard user has to reach the screen for everything, and #14's
+   own question is whether that is worth changing -- "cheap to leave alone, less
+   cheap to half-do". Left alone, which is that answer. There is no selection or
+   focus concept to hang a key handler on, and GameTable is already focusable, so
+   keys arrive and are ignored. A decision rather than an oversight
+
+ - NOT done: the secondary mouse button. A non-drag way to scroll a hand past
+   m_maxCardsDisplay is what the wheel is, and adding a second one for it would be
+   two ways to do one thing
+
+ - NOT done: scaling the chrome. The cards now scale with the window and the
+   direction arrow, player indicators, card badge, emoticons and winning banner do
+   not, which is fine at every window the platform can produce and wrong below about
+   200dp. Making it right means scaling every bitmap initCards builds, which is the
+   design pass #13 called out as a decision somebody has to make first
+
+ - test count is 255 unit plus 9 instrumented

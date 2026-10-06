@@ -85,6 +85,18 @@ class GameTable private constructor(context: Context) : View(context)
 	private var m_cardoffset = IntArray(4)
 	private var m_currentDrag = IntArray(4)
 
+	/**
+	 * Wheel travel that has not yet come to a whole card, per seat.
+	 *
+	 * A mouse wheel reports a detent at a time and AXIS_VSCROLL is 1.0 for it; a
+	 * trackpad reports a swipe as a stream of amounts well under that, three or
+	 * four per cent each. Rounding each event on its own would therefore throw away
+	 * almost every trackpad gesture and leave the tail of a swipe unspent, so the
+	 * fraction is kept and spent when it adds up. Per seat, because the pointer is
+	 * over one hand at a time and the two should not share a rounding error.
+	 */
+	private val m_wheelAccumulator = FloatArray(4)
+
 	private var m_maxCardsDisplay = 7
 
 	private val m_drawMatrix = Matrix()
@@ -387,7 +399,19 @@ class GameTable private constructor(context: Context) : View(context)
 
 		val maxCardsLayout2 = if (maxNumComputerCards > maxNumHumanCards) maxNumHumanCards else maxNumComputerCards
 
-		m_maxCardsDisplay = if (maxCardsLayout1 > maxCardsLayout2) maxCardsLayout1 else maxCardsLayout2
+		// At least one card, whatever the window says. Both candidates above are
+		// integer divisions and both go negative on a window too small for either
+		// layout, and everything downstream is `numcards - m_maxCardsDisplay`, so
+		// zero or less leaves the table blank rather than throwing: the loops over
+		// the cards collapse to empty ones. Issue #14 measured 320x240 at xhdpi
+		// reaching exactly zero, which is why this line exists.
+		//
+		// Sizing the cards to the window is what actually takes that case out of
+		// reach -- the same window now fits ten cards rather than none -- so this is
+		// the belt to those braces rather than a fix on its own. It stays because the
+		// measurement was taken, not reasoned, and a floor of one is what the
+		// arithmetic below needs to be true at any window at all.
+		m_maxCardsDisplay = max (1, if (maxCardsLayout1 > maxCardsLayout2) maxCardsLayout1 else maxCardsLayout2)
 
 		Log.d("HDU", "[onSizeChanged] maxCardsLayout1: " + maxCardsLayout1)
 		Log.d("HDU", "[onSizeChanged] maxCardsLayout2: " + maxCardsLayout2)
@@ -577,180 +601,372 @@ class GameTable private constructor(context: Context) : View(context)
 		return m_heldSteady
 	}
 
+	/**
+	 * Which seat's hand is under a point, or 0 for the bare table.
+	 *
+	 * The hit test is `m_handBoundingRect`, which is the rect RedrawHand worked
+	 * out on the last frame rather than a rect computed here from the card count,
+	 * so this reports where the cards *are* -- which is what a touch has to hit to
+	 * be a touch on a hand. That also means it knows nothing until the table has
+	 * been drawn once, which is why a wheel over a table that has not been drawn
+	 * yet scrolls nothing rather than throwing.
+	 *
+	 * South first, as it was: the four rects can touch at a corner on a small
+	 * window and the bottom hand is the one being played.
+	 */
+	private fun seatAt (x: Int, y: Int): Int
+	{
+		for (seat in intArrayOf(Game.SEAT_SOUTH, Game.SEAT_WEST,
+				Game.SEAT_NORTH, Game.SEAT_EAST))
+		{
+			val r = m_handBoundingRect[seat - 1]
+			if (r != null && r.contains(x, y))
+			{
+				return seat
+			}
+		}
+
+		return 0
+	}
+
+	/**
+	 * The furthest a seat's hand can be scrolled: zero at the start of the hand,
+	 * and the overflow at the end.
+	 *
+	 * Zero rather than a negative when the whole hand fits, so the bound is
+	 * always a real one -- `coerceIn` needs the low end below the high end.
+	 */
+	private fun maxOffsetFor (seat: Int): Int
+	{
+		val h = m_game?.getPlayer(seat - 1)?.getHand() ?: return 0
+		return max (0, h.getNumCards() - m_maxCardsDisplay)
+	}
+
+	/** A card offset, held to what [maxOffsetFor] allows for that seat's hand. */
+	private fun clampOffset (seat: Int, offset: Int): Int
+	{
+		return offset.coerceIn (0, maxOffsetFor (seat))
+	}
+
+	/**
+	 * Drops a touch in progress without acting on it.
+	 *
+	 * Used for ACTION_CANCEL, which the platform sends when it takes the gesture
+	 * away -- a parent intercepting it, a window changing underneath it, a palm
+	 * landing -- and for a second finger, which makes the gesture something this
+	 * game has no meaning for.
+	 *
+	 * Clearing the drag is not the tidiness it looks like. A cancel used to leave
+	 * m_currentDrag holding whatever it had been set to, and RedrawHand adds that
+	 * to the seat's offset on every frame after, so a drag interrupted partway
+	 * through shifted that hand by the live delta for as long as the table was up.
+	 * The next tap's ACTION_UP then found the stale delta still set and committed
+	 * it -- m_cardoffset += a drag from a gesture that had already been taken away.
+	 * Both halves of that need this to zero the field.
+	 */
+	private fun cancelGesture ()
+	{
+		m_handler.removeCallbacks(m_touchAndHoldTask)
+		m_waitingForTouchAndHold = false
+		m_heldSteady = false
+		m_touchAndHold = false
+		m_touchSeat = 0
+		m_touchDrawPile = false
+		m_touchDiscardPile = false
+		m_ptTouchDown = null
+		m_currentDrag.fill (0)
+		invalidate()
+	}
+
 	override fun onTouchEvent(event: MotionEvent): Boolean
 	{
-		if (event.action == MotionEvent.ACTION_CANCEL)
+		// actionMasked, not action, and deliberately. The raw action packs the
+		// pointer index into its high bits, so `event.action == ACTION_DOWN` was
+		// only ever true for pointer 0's own press, and a second finger's down and
+		// up arrived as ACTION_POINTER_DOWN and ACTION_POINTER_UP, matched nothing
+		// here, and were passed to super. That is harmless right up until it is
+		// not: one finger resting on a card while a second lands and lifts makes
+		// the first finger's release a pointer-up and the second's a plain ACTION_UP.
+		// The tap handler below then saw the tail of a gesture whose start it had
+		// never been given, with a seat and a touch-down point still set from the
+		// first finger, and played the card. Two thumbs on a tablet, or a stylus
+		// left resting on the glass, could play a card nobody tapped.
+		//
+		// So the gesture is pointer 0's throughout, read explicitly below, and a
+		// second pointer disarms it and stays disarmed until everything lifts: there
+		// is no two-finger gesture in this game, and the safe reading of one that
+		// arrives is that it was not a tap.
+		//
+		// Which tool is pointer 0 is not this class's business. The framework
+		// already sends one pointer at a time for the tool in use and the rest as
+		// source-and-tool tagged extras, so a stylus resting while a finger works
+		// arrives here as a second pointer and is disarmed by the same line.
+		when (event.actionMasked)
 		{
-			m_handler.removeCallbacks(m_touchAndHoldTask)
-			m_waitingForTouchAndHold = false
-			return true
-		}
-
-		if (event.action == MotionEvent.ACTION_DOWN)
-		{
-			val x = event.x.toInt()
-			val y = event.y.toInt()
-
-			m_ptTouchDown = Point (x, y)
-			m_touchAndHold = false
-			m_heldSteady = true
-
-			m_touchDiscardPile = false
-			m_touchDrawPile = false
-			m_touchSeat = 0
-			if ((m_handBoundingRect[Game.SEAT_SOUTH - 1] != null)
-					&& m_handBoundingRect[Game.SEAT_SOUTH - 1]!!.contains(x, y))
+			MotionEvent.ACTION_CANCEL ->
 			{
-				m_touchSeat = Game.SEAT_SOUTH
-			}
-			else if ((m_handBoundingRect[Game.SEAT_WEST - 1] != null)
-				&& m_handBoundingRect[Game.SEAT_WEST - 1]!!.contains(x, y))
-			{
-				m_touchSeat = Game.SEAT_WEST
-			}
-			else if ((m_handBoundingRect[Game.SEAT_NORTH - 1] != null)
-					&& m_handBoundingRect[Game.SEAT_NORTH - 1]!!.contains(x, y))
-			{
-				m_touchSeat = Game.SEAT_NORTH
-			}
-			else if ((m_handBoundingRect[Game.SEAT_EAST - 1] != null)
-					&& m_handBoundingRect[Game.SEAT_EAST - 1]!!.contains(x, y))
-			{
-				m_touchSeat = Game.SEAT_EAST
+				cancelGesture()
+				return true
 			}
 
-			if (m_touchSeat != 0)
+			// A second finger is not a gesture this game has. Dropping what the
+			// first one had set up is the whole treatment, and it is enough: with
+			// the seat cleared there is nothing for a later UP to play a card or
+			// commit a drag with.
+			MotionEvent.ACTION_POINTER_DOWN ->
 			{
-				m_waitingForTouchAndHold = true
-				m_handler.postDelayed (m_touchAndHoldTask, 1000)
+				cancelGesture()
+				return true
+			}
+
+			MotionEvent.ACTION_DOWN ->
+			{
+				// Pointer 0 spelled out rather than read as event.x, which is the same
+				// number and says less. The whole handler is about pointer 0, so it
+				// says so once here and then works in plain ints.
+				val x = event.getX(0).toInt()
+				val y = event.getY(0).toInt()
 
 				m_ptTouchDown = Point (x, y)
-				return true
-			}
+				m_touchAndHold = false
+				m_heldSteady = true
 
-			if (m_drawPileBoundingRect != null && m_drawPileBoundingRect!!.contains (x, y))
-			{
-				m_touchDrawPile = true
-			}
+				m_touchDiscardPile = false
+				m_touchDrawPile = false
+				m_touchSeat = seatAt (x, y)
 
-			if (m_discardPileBoundingRect != null && m_discardPileBoundingRect!!.contains (x, y))
-			{
-				m_waitingForTouchAndHold = true
-				m_handler.postDelayed (m_touchAndHoldTask, 1000)
-
-				m_touchDiscardPile = true
-			}
-
-			return true
-		}
-		else if (event.action == MotionEvent.ACTION_UP)
-		{
-			if (m_touchAndHold)
-			{
-				return true
-			}
-
-			m_waitingForTouchAndHold = false
-
-			// First, because it is the one tap that means the same thing wherever
-			// it lands: a novice-mode pause is waiting, and this touch is the
-			// player's answer to it. Cleared here, before the pile and hand
-			// handling, so the rest of the UP handler goes on to do whatever else
-			// the touch was on -- releasing this one does not swallow it.
-			m_game!!.tableTapped ()
-
-			// if we haven't moved from the card we originally touched down on,
-			// we'll play that card.
-			if (heldSteadyHand())
-			{
-				handCardTapped (m_touchSeat, m_ptTouchDown!!)
-				return true
-			}
-
-			if (heldSteadyDraw())
-			{
-				drawPileTapped ()
-				return true
-			}
-
-			if (heldSteadyDiscard())
-			{
-				discardPileTapped ()
-				return true
-			}
-
-			// if we're letting up on a drag, commit the drag value
-			if (m_touchSeat != 0)
-			{
-				val idx = m_touchSeat - 1
-				if (m_currentDrag[idx] != 0)
+				if (m_touchSeat != 0)
 				{
-					m_cardoffset[idx] += m_currentDrag[idx]
+					m_waitingForTouchAndHold = true
+					m_handler.postDelayed (m_touchAndHoldTask, 1000)
 
-					// set bounds properly
-					val p = m_game!!.getPlayer(idx)!!
-					val ncards = p.getHand()!!.getNumCards()
+					m_ptTouchDown = Point (x, y)
+					return true
+				}
 
-					if (m_cardoffset[idx] >= ncards - m_maxCardsDisplay)
-					{
-						m_cardoffset[idx] = ncards - m_maxCardsDisplay
-					}
+				if (m_drawPileBoundingRect != null && m_drawPileBoundingRect!!.contains (x, y))
+				{
+					m_touchDrawPile = true
+				}
 
-					if (m_cardoffset[idx] < 0)
-					{
-						m_cardoffset[idx] = 0
-					}
+				if (m_discardPileBoundingRect != null && m_discardPileBoundingRect!!.contains (x, y))
+				{
+					m_waitingForTouchAndHold = true
+					m_handler.postDelayed (m_touchAndHoldTask, 1000)
 
+					m_touchDiscardPile = true
+				}
+
+				return true
+			}
+
+			MotionEvent.ACTION_UP ->
+			{
+				// A second finger may have disarmed this gesture, in which case there
+				// is no seat and no touch-down point left to play a card from. The
+				// rest of this arm still runs: a tap anywhere on the table is still
+				// a tap on the table, which is what answers a novice-mode pause, and
+				// that was true of a two-finger tap before this too.
+				if (m_touchAndHold)
+				{
+					return true
+				}
+
+				m_waitingForTouchAndHold = false
+
+				// First, because it is the one tap that means the same thing wherever
+				// it lands: a novice-mode pause is waiting, and this touch is the
+				// player's answer to it. Cleared here, before the pile and hand
+				// handling, so the rest of the UP handler goes on to do whatever else
+				// the touch was on -- releasing this one does not swallow it.
+				m_game!!.tableTapped ()
+
+				// if we haven't moved from the card we originally touched down on,
+				// we'll play that card.
+				if (heldSteadyHand())
+				{
+					handCardTapped (m_touchSeat, m_ptTouchDown!!)
+					return true
+				}
+
+				if (heldSteadyDraw())
+				{
+					drawPileTapped ()
+					return true
+				}
+
+				if (heldSteadyDiscard())
+				{
+					discardPileTapped ()
+					return true
+				}
+
+				// if we're letting up on a drag, commit the drag value
+				if (m_touchSeat != 0)
+				{
+					// One place to hold an offset to its bounds, shared with the wheel
+					// and with RedrawHand. It used to be spelled out in full here and
+					// in full in RedrawHand -- two copies of two ends of one bound, one
+					// step from going out of step, and the wheel would have been a
+					// third.
+					val idx = m_touchSeat - 1
+					m_cardoffset[idx] = clampOffset (m_touchSeat, m_cardoffset[idx] + m_currentDrag[idx])
 					m_currentDrag[idx] = 0
+					m_touchSeat = 0
+					return true
 				}
-				m_touchSeat = 0
+
 				return true
 			}
 
-			return true
-		}
-		else if (event.action == MotionEvent.ACTION_MOVE)
-		{
-			if (m_touchSeat != 0)
+			MotionEvent.ACTION_MOVE ->
 			{
-				val spacing = if (m_game!!.getPlayer(m_touchSeat - 1)!! is HumanPlayer)
-					m_cardSpacingHuman
-				else
-					m_cardSpacing
-
-				var cardoffset: Int
-
-				if (m_touchSeat == Game.SEAT_NORTH || m_touchSeat == Game.SEAT_SOUTH)
+				// Only while a single pointer is down. A second one has already
+				// cleared m_touchSeat, so this is belt to the braces of that, and
+				// it is here because the check is free and the failure it prevents
+				// is a hand jumping by a drag nobody made.
+				if (m_touchSeat != 0 && event.pointerCount == 1)
 				{
-					val distx = event.x.toInt() - m_ptTouchDown!!.x
-					cardoffset = distx / (spacing / 2)
-				}
-				else
-				{
-					val disty = event.y.toInt() - m_ptTouchDown!!.y
-					cardoffset = disty / spacing
-				}
+					val spacing = if (m_game!!.getPlayer(m_touchSeat - 1)!! is HumanPlayer)
+						m_cardSpacingHuman
+					else
+						m_cardSpacing
 
-				if (cardoffset != 0)
-				{
-					if (m_heldSteady)
+					var cardoffset: Int
+
+					if (m_touchSeat == Game.SEAT_NORTH || m_touchSeat == Game.SEAT_SOUTH)
 					{
-						Log.d("HDU", "[ACTION_MOVE] cardoffset = " + cardoffset + ", m_heldSteady=false now")
-						m_waitingForTouchAndHold = false
-						m_handler.removeCallbacks(m_touchAndHoldTask)
-						m_heldSteady = false
+						val distx = event.getX(0).toInt() - m_ptTouchDown!!.x
+						cardoffset = distx / (spacing / 2)
 					}
+					else
+					{
+						val disty = event.getY(0).toInt() - m_ptTouchDown!!.y
+						cardoffset = disty / spacing
+					}
+
+					if (cardoffset != 0)
+					{
+						if (m_heldSteady)
+						{
+							Log.d("HDU", "[ACTION_MOVE] cardoffset = " + cardoffset + ", m_heldSteady=false now")
+							m_waitingForTouchAndHold = false
+							m_handler.removeCallbacks(m_touchAndHoldTask)
+							m_heldSteady = false
+						}
+					}
+
+					// invert the offset, as a slide to the left means increase the offset
+					m_currentDrag[m_touchSeat - 1] = 0 - cardoffset
+					this.invalidate()
+
+					return true
 				}
+			}
 
-				// invert the offset, as a slide to the left means increase the offset
-				m_currentDrag[m_touchSeat - 1] = 0 - cardoffset
-				this.invalidate()
-
-				return true
+			else ->
+			{
+				// ACTION_POINTER_UP, and anything else: nothing to do and nothing
+				// to undo. A pointer going up is not pointer 0 letting go -- the UP
+				// arm is where that happens -- and whatever gesture it belonged to
+				// was disarmed when it arrived.
 			}
 		}
 
 		return super.onTouchEvent(event)
+	}
+
+	/**
+	 * A mouse wheel, a trackpad, or anything else that scrolls rather than taps.
+	 *
+	 * This is the whole of the desktop input model, and it is here because of what
+	 * is missing without it. A hand longer than the table can show is scrolled by
+	 * dragging it: press on the cards, move, let go. That is fine with a finger and
+	 * awkward with a mouse, and a trackpad cannot hold a button and move at the
+	 * same time without being two hands. So a large screen -- the case issues #13
+	 * and #14 are about -- invites scrolling a hand and offered no way to do it
+	 * but drag.
+	 *
+	 * Vertical only, because the only thing that scrolls here is a hand and a hand
+	 * runs one way or the other rather than both, and a wheel turned sideways is a
+	 * gesture that means nothing to this table. Hover events fall through to super,
+	 * which draws no hover highlight and has no scrollbar to report.
+	 */
+	override fun onGenericMotionEvent(event: MotionEvent): Boolean
+	{
+		if (event.actionMasked != MotionEvent.ACTION_SCROLL)
+		{
+			return super.onGenericMotionEvent(event)
+		}
+
+		// The pointer position is a real x/y even on a scroll event -- the wheel is
+		// at the pointer -- and it is what says whose hand is being scrolled.
+		val seat = seatAt (event.x.toInt(), event.y.toInt())
+		if (seat == 0)
+		{
+			// Bare table, or a table that has not been drawn yet. Not ours to eat,
+			// so the parent gets it: on a tablet with a mouse this is how a scroll
+			// over the game's border gets to whatever is above it.
+			return super.onGenericMotionEvent(event)
+		}
+
+		scrollHandBy (seat, event.getAxisValue (MotionEvent.AXIS_VSCROLL))
+		return true
+	}
+
+	/**
+	 * Scrolls a seat's hand by a wheel's worth of travel, which is where the
+	 * direction and the rounding live.
+	 *
+	 * [travel] is AXIS_VSCROLL, which is positive away from the user. Away from the
+	 * user means the table's contents move up, which means earlier cards come into
+	 * view and the offset goes *down*. The same sign serves a hand running left to
+	 * right and one running top to bottom, because up is up in both -- which is
+	 * why this does not ask which seat it was handed.
+	 *
+	 * Travel accumulates rather than being truncated per event, and the reasoning
+	 * is in [m_wheelAccumulator]: a wheel is a detent at a time, a trackpad is not.
+	 *
+	 * `internal` rather than private because AXIS_VSCROLL cannot be put on a
+	 * MotionEvent without a real InputDevice behind it -- the axis is read out of
+	 * native state, not out of the pointer coordinates an event is built from -- so
+	 * there is no way to build a scroll event to test this through
+	 * onGenericMotionEvent. The event arm above is four lines and the behaviour is
+	 * here, which is where the tests can reach.
+	 */
+	internal fun scrollHandBy (seat: Int, travel: Float)
+	{
+		if (travel == 0f)
+		{
+			return
+		}
+
+		val idx = seat - 1
+		m_wheelAccumulator[idx] -= travel
+
+		// Truncating towards zero, which for a negative accumulator rounds up. What
+		// matters is that it truncates rather than rounds: a rounding conversion
+		// reaches a whole card at half a detent and would move the hand before the
+		// user had turned the wheel as far as a mouse's own detents say.
+		val cards = m_wheelAccumulator[idx].toInt()
+		if (cards == 0)
+		{
+			return
+		}
+		m_wheelAccumulator[idx] -= cards
+
+		// Clamped, so a hand that fits does not scroll off its own start and a hand
+		// at its end does not accumulate a runaway offset. The bound does the work;
+		// there is no separate "is there anything to scroll" test, because a hand
+		// that fits has a bound of zero and takes the same path.
+		val scrolled = clampOffset (seat, m_cardoffset[idx] + cards)
+		if (scrolled == m_cardoffset[idx])
+		{
+			return
+		}
+
+		m_cardoffset[idx] = scrolled
+		invalidate()
 	}
 
 	private fun drawPileTapped ()
@@ -1059,25 +1275,10 @@ class GameTable private constructor(context: Context) : View(context)
 		val numcards = h.getNumCards()
 
 		// keep the offsets sane
-		if (m_cardoffset[seat-1] > numcards - m_maxCardsDisplay)
-		{
-			m_cardoffset[seat-1] = numcards - m_maxCardsDisplay
-		}
-		if (m_cardoffset[seat-1] < 0)
-		{
-			m_cardoffset[seat-1] = 0
-		}
+		m_cardoffset[seat-1] = clampOffset (seat, m_cardoffset[seat-1])
 
 		// apply the current drag
-		var cardoffset = m_cardoffset[seat - 1] + m_currentDrag[seat - 1]
-		if (cardoffset > numcards - m_maxCardsDisplay)
-		{
-			cardoffset = numcards - m_maxCardsDisplay
-		}
-		if (cardoffset < 0)
-		{
-			cardoffset = 0
-		}
+		var cardoffset = clampOffset (seat, m_cardoffset[seat - 1] + m_currentDrag[seat - 1])
 
 		var numcardsshowing = numcards - m_cardoffset[seat - 1]
 		numcardsshowing = if (numcardsshowing > m_maxCardsDisplay) m_maxCardsDisplay else numcardsshowing

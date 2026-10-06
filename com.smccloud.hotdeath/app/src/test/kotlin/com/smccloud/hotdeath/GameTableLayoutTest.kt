@@ -75,7 +75,18 @@ class GameTableLayoutTest
 			Geometry("unfolded on its side", 2208, 1840, "xhdpi", GameTable.Arrangement.NEAR_SQUARE),
 			Geometry("tablet portrait", 1600, 2560, "xhdpi", GameTable.Arrangement.PORTRAIT),
 			Geometry("tablet landscape", 2560, 1600, "xhdpi", GameTable.Arrangement.LANDSCAPE),
-			Geometry("small window", 900, 700, "xhdpi", GameTable.Arrangement.LANDSCAPE))
+			Geometry("small window", 900, 700, "xhdpi", GameTable.Arrangement.LANDSCAPE),
+			// The reachable bottom end: 220dp is the minimum size the platform gives a
+			// freeform or split-screen window, and 320dp the narrow half of a tablet
+			// in a portrait split. Before the cards were sized to the window, the
+			// 320x240 window in issue #14's table computed m_maxCardsDisplay as 0 and
+			// drew no cards at all; these three are the sizes that replaced it, at all
+			// three densities, and the floor of one card in onSizeChanged is asserted
+			// against them rather than against a window the system cannot produce.
+			Geometry("freeform minimum, mdpi", 220, 220, "mdpi", GameTable.Arrangement.NEAR_SQUARE),
+			Geometry("freeform minimum, hdpi", 330, 330, "hdpi", GameTable.Arrangement.NEAR_SQUARE),
+			Geometry("freeform minimum, xhdpi", 440, 440, "xhdpi", GameTable.Arrangement.NEAR_SQUARE),
+			Geometry("tablet split screen", 640, 440, "xhdpi", GameTable.Arrangement.LANDSCAPE))
 
 	/**
 	 * A laid-out table, plus the numbers the assertions read.
@@ -168,6 +179,27 @@ class GameTableLayoutTest
 	 * invariant rather than a comparison because *where* the points land is a
 	 * design decision that has already been changed once and may change again,
 	 * while *being on the table* has not.
+	 *
+	 * **How far down the window sizes go, and why not further.** The list stops at
+	 * the smallest window the platform will actually hand the app -- 220dp, which is
+	 * the minimum size for a freeform or split-screen window. Below that it is not a
+	 * case a device can produce, and asserting on it would only pin a number nobody
+	 * can reach. It was worth measuring rather than assuming, because it is not
+	 * obvious where the floor is, and it came out further down than expected:
+	 *
+	 *     density   smallest square   smallest 4:3     both in dp
+	 *     mdpi      200px             200x150px         200dp, 200x150dp
+	 *     hdpi      300px             300x225px         200dp, 200x150dp
+	 *     xhdpi     340px             340x255px         170dp, 170x127dp
+	 *
+	 * Every one of those is below the 220dp platform minimum, so at every density
+	 * the layout holds together across every window the system can give it. Below
+	 * it the direction arrow and the four player indicators start to run off: they
+	 * are laid out at their bitmap's own size, which does not scale with the window
+	 * the way the cards now do, so a window narrower than the group itself puts the
+	 * east indicator past the right edge -- at 320x240 xhdpi its left edge is 325.
+	 * That is a limit of the chrome, not of the cards, and it is out of reach; it is
+	 * recorded in issue #14 rather than fixed here.
 	 */
 	@Test
 	fun everyAnchorPointIsInsideTheWindow ()
@@ -178,10 +210,14 @@ class GameTableLayoutTest
 
 			for ((name, point) in laid.points)
 			{
-				assertTrue("${geometry.name}: $name is off the left of the window" +
+				// "Outside", not "off the left": the same assertion catches a point
+				// past the right edge, and a failure message that said "left" for a
+				// point at x=325 in a 320 pixel window sent the reading in the wrong
+				// direction. It cost a probe to work out which anchor it was.
+				assertTrue("${geometry.name}: $name is outside the window" +
 								" (x=${point.x} in 0..${geometry.w})",
 						point.x in 0..geometry.w)
-				assertTrue("${geometry.name}: $name is off the top of the window" +
+				assertTrue("${geometry.name}: $name is outside the window" +
 								" (y=${point.y} in 0..${geometry.h})",
 						point.y in 0..geometry.h)
 			}

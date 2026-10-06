@@ -15,7 +15,7 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.17 (`versionCode` 1004017), unreleased |
+| Current version | 1.4.18 (`versionCode` 1004018), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
 | Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
@@ -107,7 +107,10 @@ Exit. Continue is only shown when a saved game exists.
    previous hand deals.
 2. The dealer chooses how many cards to deal, between **5 and 15**.
 3. Tap a card in your hand to play it. The badge in the lower-right corner of a hand
-   shows how many cards it holds; drag left/right to scroll a hand that overflows.
+   shows how many cards it holds. A hand that overflows the table scrolls — drag it
+   with a finger or the mouse button, or turn a mouse wheel over it. A trackpad
+   works too: the table accumulates the travel, so a short swipe moves a card or two
+   and a long one moves as far as you take it.
 4. **DRAW** and **PASS** are also available from the options menu, as is **HELP**.
 5. Tap and hold any card to see its rules text in-game, or use the menu's *Card Info*
    to browse the full card catalog for the deck currently in play.
@@ -389,6 +392,8 @@ needs a device or emulator). A tracked `Jenkinsfile` runs both: unit tests, lint
 The suite runs on the JVM with Robolectric, which means **it can be run without an
 emulator**. `GameTableLayoutTest` in particular needs nothing but a measure spec and
 a layout call, and covers window shapes no emulator in the matrix has.
+`GameTableInputTest` sends real `MotionEvent`s at a drawn table, which is how the
+touch and wheel behaviour is covered at all — no emulator in the matrix has a mouse.
 
 `verifyVersionCode` is the versioning gate described under
 [Credits and history](#credits-and-history): it fails the build when
@@ -507,7 +512,7 @@ Main ──> GameActivity ──> GameTable (View, custom Canvas drawing)
 | Class | Lines | Role |
 |---|---|---|
 | **`Game`** | 2,062 | The rules engine *and* the game thread. Owns the deck, both piles, the four players, the active penalty, and the turn loop. Reaches the UI only through `runOnUiThread` and `GameTable.getString()`. |
-| **`GameTable`** | 1,922 | The entire board, drawn by hand on a `Canvas` — no layout XML. Handles portrait/landscape geometry, per-seat hand placement and drag scrolling, pile rendering, direction and color indicators, scores, aggressor/victim emoticons, card-count badges, hit testing, long-press card help, and the color/victim/deal dialogs. |
+| **`GameTable`** | 2,411 | The entire board, drawn by hand on a `Canvas` — no layout XML. Handles portrait/landscape/near-square geometry and window-proportional card sizing, per-seat hand placement, drag and wheel scrolling, pile rendering, direction and color indicators, scores, aggressor/victim emoticons, card-count badges, hit testing, long-press card help, and the color/victim/deal dialogs. |
 | **`CardDeck`** | 796 | Card factory and registry. `reset(standardRules, oneDeck)` builds every card by enumeration, then `shuffle()` permutes a parallel `m_oCards` array so the canonical `m_cards` array stays in ID order for the UI. |
 | **`ComputerPlayer`** | 517 | The AI. See [AI behavior](#ai-behavior). |
 | **`Hand`** | 472 | A player's cards plus the eleven-step scoring pass in `calculateValue()`. |
@@ -680,6 +685,73 @@ bottom seat, so portrait needs nothing today.
 `GameTableLayoutTest` covers all of this without a device, and would cover
 [#14](https://github.com/smccloud/Hot-Death-Uno/issues/14) from the tablet side
 unchanged.
+
+### Tablets, and the input model
+
+[#14](https://github.com/smccloud/Hot-Death-Uno/issues/14) is the same problem from
+the tablet side, and four of its five sub-items were the card-sizing work above: a
+tablet is large *and* dense, so it got cards that were neither, and it showed fewer
+cards per hand the bigger and sharper it was. What was left was the input model.
+
+**There is now a wheel.** A hand longer than the table can show is scrolled by
+dragging it, which is fine with a finger and awkward with a mouse — and a trackpad
+cannot hold a button and move at the same time without being two hands. So a large
+screen invited a scroll it offered no way to do but press-and-drag.
+`GameTable.onGenericMotionEvent` reads `AXIS_VSCROLL` and scrolls the hand under the
+pointer. A scroll over bare table is passed up rather than swallowed, so one over the
+game's border still reaches whatever is above it.
+
+Travel **accumulates** rather than being truncated per event. A mouse wheel reports a
+detent at a time and `AXIS_VSCROLL` is 1.0 for it; a trackpad reports a swipe as a
+stream of amounts well under one, three or four per cent each. Rounding each event on
+its own would have thrown away almost every trackpad gesture and left the tail of a
+swipe unspent. One detent is one card, the same granularity as half a card of drag.
+
+Left click already worked and is unchanged — a click is a tap. The long press is a
+fixed 1000 ms with a movement threshold, which is workable with a trackpad.
+
+**A second finger could play a card, and does not.** The touch handler compared
+`event.action`, which packs the pointer index into its high bits, so
+`action == ACTION_DOWN` and `action == ACTION_UP` were true only for pointer 0's own
+press and release. A second finger's press and release matched no branch and went to
+`super` — harmless until the ordering turned it over. One finger resting on a card
+while a second lands and lifts makes the first finger's release an
+`ACTION_POINTER_UP` and the second's a plain `ACTION_UP`, so the tap handler ran on
+the tail of a gesture whose start it had never been given, with the seat and the
+touch-down point still set from the first finger, and played the card. Two thumbs on a
+tablet, a stylus left resting on the glass, or a hand that shifts while held down.
+There is no two-finger gesture in this game, so a second pointer now disarms the
+gesture and stays disarmed until everything lifts.
+
+**A cancelled drag was committed by the next tap.** `ACTION_CANCEL` took down the long
+press and nothing else, leaving `m_currentDrag` holding whatever delta the drag had
+reached. `RedrawHand` adds that to the seat's offset on every frame after, so the hand
+sat shifted for as long as the table was up, and the next tap's `ACTION_UP` found the
+stale delta and added it to `m_cardoffset` as well — a cancel partway through a drag
+jumped the hand twice.
+
+`GameTableInputTest` covers all of this without a device, and sends real
+`MotionEvent`s at a table that has been *drawn*, not merely laid out —
+`m_handBoundingRect` is built in `RedrawHand`, and it is what the wheel and the touch
+handler hit-test against, so an undrawn table has no hand under the pointer at all.
+
+**Not done, and deliberately:**
+
+- **The keyboard.** The game is tap and long-press throughout, so a keyboard user has
+  to reach the screen for everything. #14's own question was whether that is worth
+  changing — "cheap to leave alone, less cheap to half-do" — and this is that answer.
+  There is no selection or focus concept to hang a key handler on; `GameTable` is
+  already focusable, so keys arrive and are ignored.
+- **The secondary mouse button.** A non-drag way to scroll a hand is what the wheel
+  is; a second one would be two ways to do one thing.
+- **Scaling the chrome.** The cards now scale with the window; the direction arrow,
+  player indicators, card badge, emoticons and winning banner do not. That is fine at
+  every window the platform can produce — the smallest square window in which every
+  anchor point fits is 200dp at mdpi and hdpi and 170dp at xhdpi, all below the
+  220dp minimum freeform window size — and wrong below that, where a window narrower
+  than the arrow group puts the east indicator past the right edge. Making it right
+  means scaling every bitmap `initCards` builds, which is the design pass #13 called
+  out as a decision somebody has to make first.
 
 ### Deprecated APIs
 

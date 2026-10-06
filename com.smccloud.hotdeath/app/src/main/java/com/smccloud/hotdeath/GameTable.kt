@@ -850,7 +850,7 @@ class GameTable private constructor(context: Context) : View(context)
 
 			if (c != null)
 			{
-				(p as HumanPlayer).turnDecisionPlayCard (c)
+				p.turnDecisionPlayCard (c)
 			}
 		}
 	}
@@ -957,38 +957,37 @@ class GameTable private constructor(context: Context) : View(context)
 			}
 		}
 
-		// Bound to a val rather than re-null-checking `pile`, so the smart cast is
-		// not doing any work here. `pile` is reassigned just below.
+		// Bound to a val because `pile` is reassigned to the draw pile just
+		// below. No null check: `pile!!` for numCardsInPlay would have thrown
+		// a few lines earlier, so there is nothing left for one to catch.
 		val discardPile = pile
-		if (discardPile != null)
+
+		// A while loop rather than Kotlin's for, because the body rewrites i:
+		// on the last pass it snaps i to the index of the top card, and the
+		// trailing i += skip then steps past it and ends the loop. A for
+		// cannot reassign its counter, and changing the order would drop the
+		// top card -- which is the one card the player can actually see.
+		var i = 0
+		while (i < numCardsInPlay)
 		{
-			// A while loop rather than Kotlin's for, because the body rewrites i:
-			// on the last pass it snaps i to the index of the top card, and the
-			// trailing i += skip then steps past it and ends the loop. A for
-			// cannot reassign its counter, and changing the order would drop the
-			// top card -- which is the one card the player can actually see.
-			var i = 0
-			while (i < numCardsInPlay)
+			// make sure that the top card is drawn...
+			if (i >= numCardsInPlay - skip)
 			{
-				// make sure that the top card is drawn...
-				if (i >= numCardsInPlay - skip)
-				{
-					i = numCardsInPlay - 1
-				}
-
-				val c = discardPile.getCard(i)
-				if (c != null)
-				{
-					// FIXME -- make resolution independent
-					x = m_ptDiscardPile!!.x + (i.toFloat() / skip.toFloat()).toInt() * 2
-					y = m_ptDiscardPile!!.y + (i.toFloat() / skip.toFloat()).toInt() * 2
-					c.setFaceUp(true)
-
-					this.drawCard (canvas, c, x, y, true)
-				}
-
-				i += skip
+				i = numCardsInPlay - 1
 			}
+
+			val c = discardPile.getCard(i)
+			if (c != null)
+			{
+				// FIXME -- make resolution independent
+				x = m_ptDiscardPile!!.x + (i.toFloat() / skip.toFloat()).toInt() * 2
+				y = m_ptDiscardPile!!.y + (i.toFloat() / skip.toFloat()).toInt() * 2
+				c.setFaceUp(true)
+
+				this.drawCard (canvas, c, x, y, true)
+			}
+
+			i += skip
 		}
 
 
@@ -2115,7 +2114,7 @@ private fun initCards ()
 					{
 						if (idx == 0)
 						{
-							(p as HumanPlayer).setVictim(Game.SEAT_WEST)
+							p.setVictim(Game.SEAT_WEST)
 							return@OnClickListener
 						}
 						idx--
@@ -2124,7 +2123,7 @@ private fun initCards ()
 					{
 						if (idx == 0)
 						{
-							(p as HumanPlayer).setVictim(Game.SEAT_NORTH)
+							p.setVictim(Game.SEAT_NORTH)
 							return@OnClickListener
 						}
 						idx--
@@ -2133,7 +2132,7 @@ private fun initCards ()
 					{
 						if (idx == 0)
 						{
-							(p as HumanPlayer).setVictim(Game.SEAT_EAST)
+							p.setVictim(Game.SEAT_EAST)
 							return@OnClickListener
 						}
 						idx--
@@ -2156,7 +2155,7 @@ private fun initCards ()
 					val p = m_game!!.getDealer()
 					if (p is HumanPlayer)
 					{
-						(p as HumanPlayer).setNumCardsToDeal(i + 5)
+						p.setNumCardsToDeal(i + 5)
 					}
 				})
 				.show();
@@ -2174,7 +2173,7 @@ private fun initCards ()
 					val p = m_game!!.getCurrPlayer()
 					if (p is HumanPlayer)
 					{
-						(p as HumanPlayer).setColor(i + 1)
+						p.setColor(i + 1)
 					}
 				})
 				.show();

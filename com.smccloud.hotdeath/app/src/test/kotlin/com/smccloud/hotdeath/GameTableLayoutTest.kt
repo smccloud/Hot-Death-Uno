@@ -148,11 +148,11 @@ class GameTableLayoutTest
 					pointInArray(table, "m_ptPlayerIndicator", seat - 1)!!
 		}
 
-		points["m_ptDrawPile"] = field(table, "m_ptDrawPile") as Point
-		points["m_ptDiscardPile"] = field(table, "m_ptDiscardPile") as Point
-		points["m_ptDirColor"] = field(table, "m_ptDirColor") as Point
-		points["m_ptWinningMessage"] = field(table, "m_ptWinningMessage") as Point
-		points["m_ptMessages"] = field(table, "m_ptMessages") as Point
+		points["m_ptDrawPile"] = field<Point>(table, "m_ptDrawPile")
+		points["m_ptDiscardPile"] = field<Point>(table, "m_ptDiscardPile")
+		points["m_ptDirColor"] = field<Point>(table, "m_ptDirColor")
+		points["m_ptWinningMessage"] = field<Point>(table, "m_ptWinningMessage")
+		points["m_ptMessages"] = field<Point>(table, "m_ptMessages")
 
 		return points
 	}
@@ -448,12 +448,12 @@ class GameTableLayoutTest
 		val beforeCards = intField(table, "m_maxCardsDisplay")
 		val beforeWidth = intField(table, "m_cardWidth")
 		val beforeState = game.getSnapshot()
-		val beforeSeat = (field(table, "m_ptSeat") as Array<Point?>)[Game.SEAT_SOUTH - 1]!!
+		val beforeSeat = field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_SOUTH - 1]!!
 
 		resize(2208, 1840)
 
 		assertEquals("the game object must not be replaced by a resize",
-				game, field(table, "m_game"))
+				game, field<Game>(table, "m_game"))
 		assertEquals("the round must survive a resize untouched",
 				beforeState, game.getSnapshot())
 
@@ -461,9 +461,9 @@ class GameTableLayoutTest
 						" card size is computed from it",
 				intField(table, "m_maxCardsDisplay") != beforeCards ||
 						intField(table, "m_cardWidth") != beforeWidth ||
-						(field(table, "m_ptSeat") as Array<Point?>)[Game.SEAT_SOUTH - 1] != beforeSeat)
+						field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_SOUTH - 1] != beforeSeat)
 
-		val afterSeat = (field(table, "m_ptSeat") as Array<Point?>)[Game.SEAT_SOUTH - 1]!!
+		val afterSeat = field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_SOUTH - 1]!!
 		assertEquals("the south seat should sit against the new height",
 				1840 - (intField(table, "m_cardHeight") + intField(table, "m_bottomMargin")),
 				afterSeat.y)
@@ -542,25 +542,34 @@ class GameTableLayoutTest
 	/** The source bitmap's dimensions, for the shape test. */
 	private fun GameTable.sourceCardSize (): Pair<Int, Int>
 	{
-		val source = field(this, "m_bmpCardBackSource") as android.graphics.Bitmap
+		val source = field<Bitmap>(this, "m_bmpCardBackSource")
 		return source.width to source.height
 	}
 
 	/** The original bitmap for a card id, which the drawn one is scaled from. */
-	private fun GameTable.sourceCardBitmap (id: Int): android.graphics.Bitmap =
-			(field(this, "m_imageSource") as Map<Int, android.graphics.Bitmap>)[id]!!
+	private fun GameTable.sourceCardBitmap (id: Int): Bitmap =
+			field<Map<Int, Bitmap>>(this, "m_imageSource")[id]!!
 
 	// ------------------------------------------------------------- reflection
 
-	private fun field (target: Any, name: String): Any?
+	/**
+	 * A private field, read as the type it is known to hold.
+	 *
+	 * Reified rather than casting at each call site: `as Array<Point?>` on an
+	 * `Any?` is an unchecked cast, because the element type is erased, so it
+	 * warns and would go on failing at runtime rather than at compile time. The
+	 * type argument here is checked, so a rename fails the compile here and a
+	 * field that changes type fails at the call site with a cast exception.
+	 */
+	private inline fun <reified T> field (target: Any, name: String): T
 	{
 		val f = target.javaClass.getDeclaredField(name)
 		f.isAccessible = true
-		return f.get(target)
+		return f.get(target) as T
 	}
 
-	private fun intField (target: Any, name: String): Int = field(target, name) as Int
+	private fun intField (target: Any, name: String): Int = field(target, name)
 
 	private fun pointInArray (target: Any, name: String, index: Int): Point? =
-			(field(target, name) as Array<Point?>)[index]
+			field<Array<Point?>>(target, name)[index]
 }

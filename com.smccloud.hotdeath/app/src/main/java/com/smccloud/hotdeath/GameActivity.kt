@@ -91,12 +91,15 @@ class GameActivity : Activity()
 			// Nullable because getString is @Nullable, exactly as it was in Java.
 			// JSONObject's constructor takes a platform String!, so a null here
 			// NPEs out of the constructor rather than being caught below -- which
-			// is the exposure the Java had too.
+			// is the exposure the Java had too. `s!!` says that out loud instead
+			// of handing the compiler a String? and letting it complain: it
+			// throws in the same place, and on this line rather than inside the
+			// constructor.
 			val s = prefs.getString("gamestate", "")
 
 			try
 			{
-				val o = JSONObject (s)
+				val o = JSONObject (s!!)
 				m_game = Game (o, this, m_go!!)
 			}
 			catch (e: JSONException)

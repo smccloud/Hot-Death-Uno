@@ -18,7 +18,7 @@ import android.widget.AbsListView
 // declaring it non-null would be a lie the compiler is entitled to act on.
 class CardImageAdapter(c: Context) : BaseAdapter()
 {
-	private lateinit var mContext: Context
+	private val mContext: Context = c
 	private val m_cardIDs: Array<Int?>
 	private val m_thumbIDs: Array<Int?>
 
@@ -58,12 +58,10 @@ class CardImageAdapter(c: Context) : BaseAdapter()
 			if (usedIDs.containsKey(cardids[i]!!))
 			{
 				m_cardIDs[idx] = cardids[i]
-				m_thumbIDs[idx] = (c as GameActivity).getCardImageID(cardids[i]!!)
+				m_thumbIDs[idx] = ga.getCardImageID(cardids[i]!!)
 				idx++
 			}
 		}
-
-		mContext = c
 	}
 
 	override fun getCount(): Int

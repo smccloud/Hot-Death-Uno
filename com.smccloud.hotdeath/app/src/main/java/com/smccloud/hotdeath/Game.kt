@@ -73,8 +73,18 @@ class Game private constructor() : Thread()
 
 	private var m_lastCardCheckedIsDefender = false
 
-	// java.lang.Object rather than Any: this lock is used with wait() and
-	// notifyAll(), which Kotlin does not expose on Any.
+	// java.lang.Object rather than Any, against the platform-class warning, and
+	// the warning is right about the type and wrong about the way out: Any is
+	// java.lang.Object already, so this could be Any() and nothing else would
+	// change -- except that wait() and notifyAll() are members of Object and
+	// Kotlin exposes neither on Any. The stdlib has no extension for them
+	// either; the ones that did are gone, and what kotlin.StandardKt__SynchronizedKt
+	// holds now is synchronized() and nothing else. Naming Object is the only
+	// spelling that reaches wait() and notifyAll(), so this one suppression is
+	// the price. The alternative is a ReentrantLock with a Condition, which
+	// would be the better shape for a pause that can wait -- but that is a
+	// rewrite of five blocks of concurrency code, not a warning fix.
+	@Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
 	private val m_pauseLock = java.lang.Object()
 	private var m_paused = false
 	private var m_resumingSavedGame = false

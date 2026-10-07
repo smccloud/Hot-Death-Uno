@@ -15,9 +15,9 @@ networked play.
 | | |
 |---|---|
 | Package | `com.smccloud.hotdeath` |
-| Current version | 1.4.18 (`versionCode` 1004018) |
+| Current version | 1.4.19 (`versionCode` 1004019), unreleased |
 | Platform | Android, `minSdk` 34 (Android 14) / `targetSdk` 36 (Android 16) |
-| Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; no third-party runtime dependencies) |
+| Language | Kotlin, on JDK 17 (the app became fully Kotlin at 1.4.5 and the test suite at 1.4.7; no Java source anywhere; one runtime dependency, `androidx.window`, for the fold) |
 | Build | Gradle 9.5.0 + Android Gradle Plugin 8.11.1 |
 | License | MIT — see [License](#license) |
 
@@ -489,10 +489,12 @@ hand-maintained and must be extended whenever a card is added.
 
 ## Architecture
 
-Sixteen classes, ~8,300 lines, no third-party libraries — all Kotlin. The
-Java-to-Kotlin migration finished at 1.4.5; the test suite followed at 1.4.7,
-so there is no Java source left anywhere in the repository. There is no MVP/MVVM
-layering; the game engine and the view are deliberately coupled.
+Sixteen classes, ~10,100 lines, all Kotlin and one dependency: `androidx.window`,
+which exists because `android.view` has no fold API at all and is the only place a
+`FoldingFeature` comes from. The Java-to-Kotlin migration finished at 1.4.5; the
+test suite followed at 1.4.7, so there is no Java source left anywhere in the
+repository. There is no MVP/MVVM layering; the game engine and the view are
+deliberately coupled.
 
 ```
 Main ──> GameActivity ──> GameTable (View, custom Canvas drawing)
@@ -512,7 +514,7 @@ Main ──> GameActivity ──> GameTable (View, custom Canvas drawing)
 | Class | Lines | Role |
 |---|---|---|
 | **`Game`** | 2,062 | The rules engine *and* the game thread. Owns the deck, both piles, the four players, the active penalty, and the turn loop. Reaches the UI only through `runOnUiThread` and `GameTable.getString()`. |
-| **`GameTable`** | 2,411 | The entire board, drawn by hand on a `Canvas` — no layout XML. Handles portrait/landscape/near-square geometry and window-proportional card sizing, per-seat hand placement, drag and wheel scrolling, pile rendering, direction and color indicators, scores, aggressor/victim emoticons, card-count badges, hit testing, long-press card help, and the color/victim/deal dialogs. |
+| **`GameTable`** | 2,545 | The entire board, drawn by hand on a `Canvas` — no layout XML. Handles portrait/landscape/near-square geometry, window-proportional card sizing and the pane a crease gives the north and south hands, per-seat hand placement, drag and wheel scrolling, pile rendering, direction and color indicators, scores, aggressor/victim emoticons, card-count badges, hit testing, long-press card help, and the color/victim/deal dialogs. |
 | **`CardDeck`** | 796 | Card factory and registry. `reset(standardRules, oneDeck)` builds every card by enumeration, then `shuffle()` permutes a parallel `m_oCards` array so the canonical `m_cards` array stays in ID order for the UI. |
 | **`ComputerPlayer`** | 517 | The AI. See [AI behavior](#ai-behavior). |
 | **`Hand`** | 472 | A player's cards plus the eleven-step scoring pass in `calculateValue()`. |
@@ -671,16 +673,33 @@ one way, 1840×2208 the other, ratios of 1.20 and 0.83 — so near-square is its
 arrangement rather than a coin flip between the other two, and it is placed like
 landscape. The same layout is now chosen whichever way you hold the device.
 
-**Not done: the hinge.** In landscape a book-style fold puts a vertical crease down
-the middle of the canvas and the human's hand is centred on `w/2`, so the hand and
-the winning banner are drawn across it. Moving them is a small change —
-`m_ptSeat[SEAT_SOUTH].x` and the four things derived from it — but there is **no
-platform inset type for a fold**. `WindowInsets.Type.displayCutout()` is notches and
-punch-holes, and is already handled; a `FoldingFeature` reaches the app only through
-`androidx.window`. So this would be the first AndroidX dependency in main source, on a
-project that has none on purpose, and it is left open as a decision about the project
-rather than about the layout. In portrait the crease is horizontal and above the
-bottom seat, so portrait needs nothing today.
+**The hinge.** In landscape a book-style fold puts a vertical crease down the
+middle of the canvas and the human's hand is centred on `w/2`, so the hand and the
+winning banner were drawn across it. There is **no platform inset type for a
+fold** — `WindowInsets.Type.displayCutout()` is notches and punch-holes, and is
+already handled — so a `FoldingFeature` reaches the app only through
+`androidx.window`, which is the one dependency the app now has. It is an
+`implementation` line and a collector in `GameActivity` that forwards the bounds;
+the layout is still `GameTable`'s arithmetic, and the card art is not rebuilt when
+the bounds change, because the window has not.
+
+What the crease does to that arithmetic is **not** a sideways shift. The hand is
+sized to fill the window — 1871px of it on the unfolded 2208×1840 — and is wider
+than either side of a crease down the middle, so a seat slid clear of the crease
+would put a long hand off the edge instead. So the north and south seats take the
+roomier side as a pane: their capacity is computed from the pane's width rather
+than the window's, and both are centred in it. The cost is cards shown before the
+scroll takes over — 14 rather than 27 unfolded, 11 rather than 25 upright — and a
+hand of 7 to 12 needs neither limit. East and west are already against the edges
+and do not move, and the piles keep the `m_cardWidth / 2` gap they have always
+left at `w/2`, which is where the crease sits.
+
+In portrait the crease is horizontal and above the bottom seat, so the human's
+hand is already on one side of it; the east and west hands cannot be moved off it
+either way, because `m_maxHeightHand` is as tall as the window allows. So a
+horizontal crease changes nothing, and that is tested rather than filtered: a
+full-width hinge leaves the pane as the whole window, which is what the seats were
+centred on to begin with.
 
 `GameTableLayoutTest` covers all of this without a device, and would cover
 [#14](https://github.com/smccloud/Hot-Death-Uno/issues/14) from the tablet side

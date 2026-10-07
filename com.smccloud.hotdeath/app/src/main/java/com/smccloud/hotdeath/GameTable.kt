@@ -113,6 +113,15 @@ class GameTable private constructor(context: Context) : View(context)
 	private var m_ptWinningMessage: Point? = null
 	private var m_ptMessages: Point? = null
 
+	/**
+	 * The hinge of a book-style foldable, in *window* coordinates, or null when
+	 * the window has none. Set by [setHinge], converted to this view's own
+	 * coordinates once per [relayout] because the table is padded away from the
+	 * system bars and the feature is not. What a crease does to the table is
+	 * worked out in [relayout], from here.
+	 */
+	private var m_hinge: Rect? = null
+
 	private val m_handBoundingRect = arrayOfNulls<Rect>(4)
 	private var m_drawPileBoundingRect: Rect? = null
 	private var m_discardPileBoundingRect: Rect? = null
@@ -336,24 +345,111 @@ class GameTable private constructor(context: Context) : View(context)
 
 	override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int)
 	{
-		// Before anything reads m_cardWidth: everything below is an offset from
-		// it. A window whose shape asks for different cards gets them here, and
-		// a phone gets the density's own size back without touching a bitmap.
+		// Before anything reads m_cardWidth: everything in relayout is an offset
+		// from it. A window whose shape asks for different cards gets them here,
+		// and a phone gets the density's own size back without touching a bitmap.
 		applyCardScale (w, h)
 
+		relayout (w, h)
+
+		super.onSizeChanged(w, h, oldw, oldh)
+
+		m_readyToStartGame = true
+		if (m_waitingToStartGame)
+		{
+			m_waitingToStartGame = false
+			m_game!!.start ()
+		}
+	}
+
+
+	/**
+	 * Every position on the table, from the window it is in.
+	 *
+	 * This used to be the whole of [onSizeChanged], and it was split out for
+	 * issue #13: a fold changes the hinge without changing the size of the
+	 * window, so nothing re-measures the view and [onSizeChanged] does not run.
+	 * [setHinge] calls this directly with the size already known, which is why
+	 * it takes the size as an argument rather than reading it off the view.
+	 *
+	 * [applyCardScale] is deliberately *not* in here. The window has not changed
+	 * when the hinge does, so the cards have not changed either, and rebuilding
+	 * them would resample the art that `aChainOfResizesNeverResamplesTheCards`
+	 * exists to protect.
+	 */
+	private fun relayout (w: Int, h: Int)
+	{
 		m_arrangement = arrangementFor (w, h)
+
+		// Issue #13. A book-style fold puts a crease across the window, and the
+		// window-to-view offset is needed before it can be compared with anything
+		// below: the feature is in window coordinates, the seats are in the
+		// table's, and the table is padded in from the system bars.
+		val hinge = m_hinge?.let {
+			val loc = IntArray (2)
+			getLocationInWindow (loc)
+			Rect (it.left - loc[0], it.top - loc[1], it.right - loc[0], it.bottom - loc[1])
+		}
 
 		m_leftMargin = m_cardWidth / 4
 		m_rightMargin = m_cardWidth / 4
 		m_topMargin = m_cardHeight / 3
 		m_bottomMargin = m_cardHeight / 3 + m_bottomMarginExternal
 
+		// The pane: the part of the window a hand that runs across the crease can
+		// live in. It is the roomier side of it, and it is the whole window when
+		// there is no crease, which is why every use of it below collapses to the
+		// arithmetic it replaces.
+		//
+		// Moving the seats sideways is not enough on its own, which is what the
+		// first version of this got wrong: m_maxWidthHandHuman is close to w by
+		// construction -- it is sized to fill the window -- and is wider than
+		// either side of a crease down the middle, so a seat pushed clear of the
+		// crease would push a long hand off the edge instead. So the north and
+		// south hands are given a pane each, their capacity is computed from the
+		// pane rather than the window (the scroll from #14 covers the cards that
+		// no longer fit), and both seats are centred in it. East and west are
+		// already against the edges, and the piles keep their m_cardWidth / 2 gap
+		// at w/2 for the crease to sit in -- the accommodation the pile row was
+		// always laid out with.
+		var paneLeft = 0
+		var paneRight = w
+
+		if (hinge != null && hinge.width() > 0)
+		{
+			// The same card margin the piles keep clear of the crease.
+			val gap = m_cardWidth / 4
+			val leftWidth = hinge.left - gap
+			val rightWidth = w - (hinge.right + gap)
+			val smallest = m_cardWidth + 2 * m_leftMargin
+
+			if (rightWidth >= leftWidth && rightWidth >= smallest)
+			{
+				paneLeft = hinge.right + gap
+			}
+			else if (leftWidth >= smallest)
+			{
+				paneRight = hinge.left - gap
+			}
+			// Neither side holding a card is not hypothetical: a horizontal
+			// crease reaches here as 0..w if anything ever sends one, and both of
+			// its sides are the window's own edges. Then the pane stays the whole
+			// window, which is what happens without a crease anyway.
+		}
+
+		val paneWidth = paneRight - paneLeft
+		val paneCentre = (paneLeft + paneRight) / 2
+
 		if (m_arrangement == Arrangement.PORTRAIT)
 		{
 			// portrait
 			m_ptDrawPile = Point (w / 2 - 5 * m_cardWidth / 4, h / 2 - m_cardHeight)
 			m_ptDiscardPile = Point (w / 2 + m_cardWidth / 4, h / 2 - m_cardHeight)
-			m_ptDirColor = Point (w /2 - m_bmpDirColorCCW.width / 2, h / 2 + m_cardHeight / 4)
+			// The piles leave a gap of m_cardWidth / 2 around w/2 for the crease
+			// to sit in, so only the direction colour has to move -- and it is
+			// centred on w/2 here rather than off to the side as in landscape.
+			m_ptDirColor = Point (paneCentre - m_bmpDirColorCCW.width / 2,
+					h / 2 + m_cardHeight / 4)
 		}
 		else
 		{
@@ -378,10 +474,16 @@ class GameTable private constructor(context: Context) : View(context)
 		m_cardSpacingHuman = 2 * (m_cardWidth / 3)
 
 		// figure out what the maximum number of cards you can display will be
+		//
+		// Both human areas are measured across the pane rather than the window
+		// (see above): a hand cannot be shown wider than the side of the crease it
+		// sits on, and layout 1's deductions for the flanking east and west hands
+		// are kept as they are even though only one of them is in the pane -- two
+		// cards of slack are not worth a case for which side the pane is on.
 
 		// calculate max cards in layout 1 (N/S cards live between E/W cards)
 
-		var humanPlayerArea = w - 2 * m_cardWidth - 2 * m_leftMargin - 2 * m_rightMargin
+		var humanPlayerArea = paneWidth - 2 * m_cardWidth - 2 * m_leftMargin - 2 * m_rightMargin
 		var maxNumHumanCards = (humanPlayerArea - m_cardWidth) / m_cardSpacingHuman + 1
 
 		var computerPlayerArea = h - m_topMargin - m_bottomMargin - (textBounds.height() * 1.2).toInt()
@@ -391,7 +493,7 @@ class GameTable private constructor(context: Context) : View(context)
 
 		// calculate max cards in layout 2 (E/W cards live between N/S cards)
 
-		humanPlayerArea = w - m_leftMargin - m_rightMargin
+		humanPlayerArea = paneWidth - m_leftMargin - m_rightMargin
 		maxNumHumanCards = (humanPlayerArea - m_cardWidth) / m_cardSpacingHuman + 1
 
 		computerPlayerArea = h - 2 * m_cardHeight - 2 * m_topMargin - 2 * m_bottomMargin
@@ -423,9 +525,14 @@ class GameTable private constructor(context: Context) : View(context)
 
 		m_maxWidthHandHuman = (m_maxCardsDisplay - 1) * m_cardSpacingHuman + m_cardWidth
 
-		m_ptSeat[Game.SEAT_NORTH - 1] = Point (w / 2, m_topMargin)
+		// The north and south seats are the two a vertical crease runs through,
+		// so they take the pane; everything derived from them below -- the winning
+		// banner, the emoticons, the badges, the score text, the toast anchor --
+		// moves with them, which is why this is two lines rather than six. East
+		// and west are already against the edges and are left alone.
+		m_ptSeat[Game.SEAT_NORTH - 1] = Point (paneCentre, m_topMargin)
 		m_ptSeat[Game.SEAT_EAST - 1] = Point (w - (m_cardWidth + m_rightMargin), h / 2)
-		m_ptSeat[Game.SEAT_SOUTH - 1] = Point (w / 2, h - (m_cardHeight + m_bottomMargin))
+		m_ptSeat[Game.SEAT_SOUTH - 1] = Point (paneCentre, h - (m_cardHeight + m_bottomMargin))
 		m_ptSeat[Game.SEAT_WEST - 1] = Point (m_leftMargin, h / 2)
 
 		m_ptWinningMessage = Point (m_ptSeat[Game.SEAT_SOUTH - 1]!!.x - m_bmpWinningMessage[0]!!.width / 2, m_ptSeat[Game.SEAT_SOUTH - 1]!!.y - m_bmpWinningMessage[0]!!.height * 5 / 4)
@@ -454,16 +561,43 @@ class GameTable private constructor(context: Context) : View(context)
 				m_ptSeat[Game.SEAT_WEST - 1]!!.y - m_maxHeightHand / 2 - (textBounds.height() * 1.1).toInt())
 
 		m_ptMessages = Point (m_ptSeat[Game.SEAT_SOUTH - 1]!!.x, m_ptSeat[Game.SEAT_SOUTH - 1]!!.y - 3 * m_cardHeight / 4)
+	}
 
-		super.onSizeChanged(w, h, oldw, oldh)
 
-		m_readyToStartGame = true
-		if (m_waitingToStartGame)
+	/**
+	 * Where the crease is, in window coordinates, or null when there is none.
+	 *
+	 * Issue #13. `android.view` has no API for a fold -- `displayCutout()` is
+	 * notches and punch-holes and is already handled in [GameActivity] -- so the
+	 * bounds come from `androidx.window`'s `FoldingFeature`, which is what makes
+	 * this the first AndroidX dependency in main source. The activity passes only
+	 * a *vertical* hinge: a horizontal one crosses the east and west hands, which
+	 * have no room to move off it (they are as tall as the window allows), and in
+	 * portrait a horizontal crease sits above the bottom seat where the human's
+	 * hand already is, so there is nothing to move.
+	 *
+	 * Called from a window-layout callback, which can arrive before the first
+	 * layout and can arrive again without the window changing size at all --
+	 * which is the whole point: the seats are recomputed here rather than waiting
+	 * for an [onSizeChanged] that would never come. Nothing else about the table
+	 * changes, so the card art is not rebuilt.
+	 */
+	fun setHinge (bounds: Rect?)
+	{
+		if (bounds == m_hinge)
 		{
-			m_waitingToStartGame = false
-			m_game!!.start ()
+			return
+		}
+
+		m_hinge = bounds
+
+		if (width > 0 && height > 0)
+		{
+			relayout (width, height)
+			invalidate ()
 		}
 	}
+
 
 	fun setBottomMargin (m: Int) {
 		m_bottomMarginExternal = m

@@ -247,7 +247,7 @@ if (hasReleaseKeystore) {
 // as current as the last person to remember to update it, and by 1.4.5 it was
 // describing a test-count scheme that had been abandoned at 1.4.0 and had never
 // matched the real counts anyway. See #12.
-def appVersion = '1.4.18'
+def appVersion = '1.4.19'
 
 def appVersionParts = appVersion.tokenize('.')
 if (appVersionParts.size() != 3 || !appVersionParts.every { it ==~ /\d+/ }) {
@@ -369,11 +369,20 @@ kotlin {
     }
 }
 
-// The app itself is framework-only; everything below is test-only.
+// One dependency in main source, and it is not test-only: androidx.window, for
+// the hinge (issue #13). android.view has no fold API of any kind --
+// displayCutout() is notches and punch-holes -- so a FoldingFeature, the only
+// way to find out where the crease is, comes from this library and nowhere
+// else. Everything below this line is test-only.
 // androidTest needs the real device/emulator. src/test runs on the JVM, and
 // supplies org.json only via Robolectric's android-all jar -- a plain JVM test
 // that calls Card.toJSON() hits the stub in android.jar and throws.
 dependencies {
+    // window, not window-java: the app is Kotlin and collects the tracker's
+    // Flow directly, so the Executor/Consumer adapter that window-java adds is
+    // not used. This is the artifact that carries FoldingFeature itself.
+    implementation 'androidx.window:window:1.5.1'
+
     androidTestImplementation 'androidx.test:core:1.6.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test:rules:1.6.1'

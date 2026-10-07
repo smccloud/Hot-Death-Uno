@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.app.Dialog
 import android.graphics.Insets
+import android.graphics.Rect
 import android.os.Bundle
 import android.widget.GridView
 import android.widget.AdapterView
@@ -18,6 +19,14 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.RelativeLayout
 import android.widget.Button
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
+import androidx.window.layout.WindowLayoutInfo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 // Every field name here is unchanged and every field is nullable, because
 // GameRoundLoopTest reaches seven of them by name:
@@ -48,6 +57,11 @@ class GameActivity : Activity()
 	private var m_gt: GameTable? = null
 	private var m_game: Game? = null
 	private var m_go: GameOptions? = null
+
+	// Issue #13: the hinge watcher. Its own scope rather than lifecycleScope,
+	// because lifecycleScope comes from lifecycle-runtime-ktx and the only
+	// non-framework dependency this project has is androidx.window itself.
+	private var m_hingeScope: CoroutineScope? = null
 
 	fun getCardImageID (id: Int): Int
 	{
@@ -211,6 +225,8 @@ class GameActivity : Activity()
 
 		applyEdgeToEdgeInsets()
 
+		observeHinge()
+
 
 		// The type argument is spelled out rather than inferred from the property,
 		// because the property is what GameRoundLoopTest sets by name: it has to
@@ -247,7 +263,9 @@ class GameActivity : Activity()
 	 * instead: the RelativeLayout shrinks, GameTable.onSizeChanged() recomputes all
 	 * of its geometry from the new size, and the options menu moves above the
 	 * navigation bar. Uses the platform WindowInsets API (available from API 30)
-	 * so the project stays dependency-free.
+	 * rather than an androidx one -- the single AndroidX dependency is
+	 * androidx.window below, and it is for the fold, which the platform has no
+	 * inset type for at all.
 	 */
 	private fun applyEdgeToEdgeInsets ()
 	{
@@ -258,6 +276,43 @@ class GameActivity : Activity()
 			v.setPadding (bars.left, bars.top, bars.right, bars.bottom)
 			WindowInsets.CONSUMED
 		})
+	}
+
+
+	/**
+	 * Watch for the hinge and tell the table where it is (issue #13).
+	 *
+	 * `android.view` has no fold API: `displayCutout()` is notches and
+	 * punch-holes, and the platform's own window metrics know nothing about the
+	 * crease either, so `FoldingFeature` -- and with it `androidx.window`, the
+	 * first AndroidX dependency in main source -- is the only route to it. The
+	 * flow is on the main dispatcher already (`flowOn(Dispatchers.Main)` inside
+	 * the tracker), so the callback below runs on the thread that draws.
+	 *
+	 * Only a vertical crease is passed on: it is the one that runs through the
+	 * north and south seats, and `GameTable.xOffHinge` says what happens to
+	 * anything else.
+	 */
+	private fun observeHinge ()
+	{
+		m_hingeScope = CoroutineScope (SupervisorJob () + Dispatchers.Main)
+
+		m_hingeScope!!.launch {
+			WindowInfoTracker.getOrCreate (this@GameActivity)
+					.windowLayoutInfo (this@GameActivity)
+					.collect { info -> applyHinge (info) }
+		}
+	}
+
+	private fun applyHinge (info: WindowLayoutInfo)
+	{
+		val crease = info.displayFeatures.firstOrNull { feature ->
+			feature is FoldingFeature &&
+					feature.orientation == FoldingFeature.Orientation.VERTICAL &&
+					!feature.bounds.isEmpty
+		}
+
+		m_gt?.setHinge (crease?.let { Rect (it.bounds) })
 	}
 
 
@@ -311,6 +366,9 @@ class GameActivity : Activity()
 	}
 
 	override fun onDestroy() {
+		m_hingeScope?.cancel ()
+		m_hingeScope = null
+
 		m_game!!.shutdown ();
 		m_game = null;
 		m_gt = null;

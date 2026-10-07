@@ -2,8 +2,10 @@ package com.smccloud.hotdeath
 
 import android.graphics.Bitmap
 import android.graphics.Point
+import android.graphics.Rect
 import android.view.View
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -91,6 +93,10 @@ class GameTableLayoutTest
 	/**
 	 * A laid-out table, plus the numbers the assertions read.
 	 *
+	 * [hinge] is set before the first layout so that `onSizeChanged` is the thing
+	 * that reads it; `aCreaseArrivingAfterTheFirstLayout` covers the other path,
+	 * which is the one a real fold takes.
+	 *
 	 * Everything the geometry is made of is private and there is no getter, so
 	 * this reads it by reflection -- the same trade GameRoundLoopTest and
 	 * HandPlayabilityTest make, and for the same reason: a rename fails here
@@ -110,7 +116,7 @@ class GameTableLayoutTest
 
 	// ------------------------------------------------------------------ fixture
 
-	private fun layOut (geometry: Geometry): Laid
+	private fun layOut (geometry: Geometry, hinge: Rect? = null): Laid
 	{
 		// Only the density is qualified, and that is not laziness: a view's size
 		// comes from the measure spec and the layout call, not from the display,
@@ -125,6 +131,8 @@ class GameTableLayoutTest
 		val options = GameOptions(activity)
 		val game = Game(activity, options)
 		val table = GameTable(activity, game, options)
+
+		table.setHinge (hinge)
 
 		table.measure(
 				View.MeasureSpec.makeMeasureSpec(geometry.w, View.MeasureSpec.EXACTLY),
@@ -264,6 +272,233 @@ class GameTableLayoutTest
 							" in a ${geometry.w}px window",
 					laid.maxWidthHandHuman <= geometry.w)
 		}
+	}
+
+	// ------------------------------------------------------------- the crease
+
+	/**
+	 * The crease as this file draws it: a strip down the middle of the window,
+	 * as wide as the margin the piles keep clear of w/2.
+	 *
+	 * That is not a device measurement -- nothing here has been run on a foldable
+	 * -- it is the gap the draw and discard piles have always left between them,
+	 * which is what issue #13 says the hinge is accommodated by. Using it keeps
+	 * the two assertions below about one band rather than about two different
+	 * ones: a crease wider than the pile gap would overlap the piles, and a
+	 * narrower one would not test the gap at all.
+	 */
+	private fun crease (geometry: Geometry, cardWidth: Int): Rect =
+			Rect (geometry.w / 2 - cardWidth / 4, 0, geometry.w / 2 + cardWidth / 4, geometry.h)
+
+	/** One seat's anchor, by seat id -- the same key [pointsOf] stores it under. */
+	private fun seatPoint (laid: Laid, seat: Int): Point = laid.points["m_ptSeat[SEAT_$seat]"]!!
+
+	/** Where a seat's hand is drawn, at the widest the window can show it. */
+	private fun handRect (laid: Laid, seat: Int): Rect
+	{
+		val at = seatPoint(laid, seat)
+
+		return if (seat == Game.SEAT_NORTH || seat == Game.SEAT_SOUTH)
+		{
+			val width = if (seat == Game.SEAT_SOUTH) laid.maxWidthHandHuman else laid.maxWidthHand
+			Rect (at.x - width / 2, at.y, at.x + width / 2, at.y + laid.cardHeight)
+		}
+		else
+		{
+			Rect (at.x, at.y - laid.maxHeightHand / 2, at.x + laid.cardWidth,
+					at.y + laid.maxHeightHand / 2)
+		}
+	}
+
+	private fun overlaps (a: Rect, b: Rect): Boolean =
+			a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+
+	/**
+	 * With no crease both hands are still centred on w/2.
+	 *
+	 * This is what keeps the whole feature off the phones: `setHinge(null)` is
+	 * the state every non-foldable window is in, and the pane arithmetic in
+	 * `GameTable.relayout` has to collapse to the arithmetic it replaced. The
+	 * card-sizing cases above already pin the numbers this does not look at --
+	 * capacity and card size -- and this pins the two points they are anchored
+	 * from.
+	 */
+	@Test
+	fun withoutACreaseBothHandsAreCentredOnTheWindow ()
+	{
+		for (geometry in GEOMETRIES)
+		{
+			val laid = layOut(geometry)
+			val centre = geometry.w / 2
+
+			assertEquals("${geometry.name}: south seat", centre,
+					seatPoint(laid, Game.SEAT_SOUTH).x)
+			assertEquals("${geometry.name}: north seat", centre,
+					seatPoint(laid, Game.SEAT_NORTH).x)
+		}
+	}
+
+	/**
+	 * A crease down the middle is under neither hand, at any window size.
+	 *
+	 * Issue #13 measured the human's hand centred on w/2 and 647px wide at xhdpi
+	 * on the unfolded 2208x1840 window, with the crease where it is -- so the
+	 * hand was drawn across it, and so was the north computer's. What makes the
+	 * seat move rather than just the hand is that a *maximal* hand is wider than
+	 * either side of a crease down the middle of the window: sliding the seat
+	 * over would put a long hand off the edge instead, which is why the capacity
+	 * is computed from the pane and asserted alongside the position here.
+	 *
+	 * The piles are deliberately *not* moved: they straddle the crease with the
+	 * gap between them on it, which is the accommodation issue #13 gave them, and
+	 * this is what says the gap is still wide enough for it.
+	 */
+	@Test
+	fun aCreaseKeepsBothHandsOffIt ()
+	{
+		for (geometry in GEOMETRIES)
+		{
+			val plain = layOut(geometry)
+			val hinge = crease(geometry, plain.cardWidth)
+			val laid = layOut(geometry, hinge)
+
+			for (seat in intArrayOf(Game.SEAT_SOUTH, Game.SEAT_NORTH,
+					Game.SEAT_EAST, Game.SEAT_WEST))
+			{
+				val hand = handRect(laid, seat)
+
+				assertFalse("${geometry.name}: the seat $seat hand $hand is across" +
+							" the crease $hinge",
+						overlaps(hand, hinge))
+				assertTrue("${geometry.name}: the seat $seat hand $hand is outside a " +
+								"${geometry.w}x${geometry.h} window",
+						hand.left >= 0 && hand.right <= geometry.w &&
+								hand.top >= 0 && hand.bottom <= geometry.h)
+			}
+
+			// The capacity follows the pane, which is what stops the hand above
+			// from being wider than the side of the crease it sits on.
+			val paneWidth = geometry.w - (hinge.right + plain.cardWidth / 4)
+			assertTrue("${geometry.name}: the human hand can be ${laid.maxWidthHandHuman}px" +
+							" wide in a ${paneWidth}px pane",
+					laid.maxWidthHandHuman <= paneWidth)
+
+			// The piles straddle the crease rather than being moved off it.
+			val drawRight = laid.points["m_ptDrawPile"]!!.x + laid.cardWidth
+			val discardLeft = laid.points["m_ptDiscardPile"]!!.x
+			assertTrue("${geometry.name}: the draw pile reaches to $drawRight over a" +
+							" crease starting at ${hinge.left}",
+					drawRight <= hinge.left)
+			assertTrue("${geometry.name}: the discard pile starts at $discardLeft before a" +
+							" crease ending at ${hinge.right}",
+					discardLeft >= hinge.right)
+
+			// East and west are against the edges and have nothing to move for.
+			assertEquals("${geometry.name}: east seat moved",
+					seatPoint(plain, Game.SEAT_EAST), seatPoint(laid, Game.SEAT_EAST))
+			assertEquals("${geometry.name}: west seat moved",
+					seatPoint(plain, Game.SEAT_WEST), seatPoint(laid, Game.SEAT_WEST))
+
+			// And every anchor, moved ones included, is still inside the window.
+			for ((name, point) in laid.points)
+			{
+				assertTrue("${geometry.name}: $name is outside the window" +
+								" (x=${point.x} in 0..${geometry.w})",
+						point.x in 0..geometry.w)
+				assertTrue("${geometry.name}: $name is outside the window" +
+								" (y=${point.y} in 0..${geometry.h})",
+						point.y in 0..geometry.h)
+			}
+		}
+	}
+
+	/**
+	 * A crease that arrives after the first layout moves the seats, and changes
+	 * nothing else.
+	 *
+	 * This is the path a real fold takes: the window keeps its size and the
+	 * hinge arrives on a window-layout callback, so `onSizeChanged` never runs
+	 * and `setHinge` has to do the work. What it must not do is rebuild the card
+	 * art -- the window has not changed, and rescaling what is already scaled is
+	 * what `aChainOfResizesNeverResamplesTheCards` exists to catch. Clearing the
+	 * crease has to put everything back, which is the state a fold back again
+	 * leaves the activity in.
+	 */
+	@Test
+	fun aCreaseArrivingAfterTheFirstLayoutMovesTheSeats ()
+	{
+		val geometry = GEOMETRIES.first { it.name == "unfolded on its side" }
+		RuntimeEnvironment.setQualifiers(geometry.density)
+
+		val activity = Robolectric.buildActivity(GameActivity::class.java).get()
+		val options = GameOptions(activity)
+		val game = Game(activity, options)
+		val table = GameTable(activity, game, options)
+
+		fun resize ()
+		{
+			table.measure(
+					View.MeasureSpec.makeMeasureSpec(geometry.w, View.MeasureSpec.EXACTLY),
+					View.MeasureSpec.makeMeasureSpec(geometry.h, View.MeasureSpec.EXACTLY))
+			table.layout(0, 0, geometry.w, geometry.h)
+		}
+
+		resize()
+
+		val centre = geometry.w / 2
+		val cardsBefore = intField(table, "m_maxCardsDisplay")
+		val widthBefore = intField(table, "m_cardWidth")
+		val seatsBefore = field<Array<Point?>>(table, "m_ptSeat").map { it!!.x }
+
+		table.setHinge (crease(geometry, widthBefore))
+
+		assertTrue("the south seat should have moved off w/2",
+				field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_SOUTH - 1]!!.x != centre)
+		assertTrue("the north seat should have moved off w/2",
+				field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_NORTH - 1]!!.x != centre)
+		assertEquals("the east seat should not have moved",
+				seatsBefore[Game.SEAT_EAST - 1],
+				field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_EAST - 1]!!.x)
+		assertEquals("a crease must not change the card size",
+				widthBefore, intField(table, "m_cardWidth"))
+		assertTrue("a crease changes the capacity, not the window, so the card" +
+						" count must change to match the pane",
+				intField(table, "m_maxCardsDisplay") <= cardsBefore)
+
+		table.setHinge (null)
+
+		assertEquals("clearing the crease should put the south seat back on w/2",
+				centre, field<Array<Point?>>(table, "m_ptSeat")[Game.SEAT_SOUTH - 1]!!.x)
+		assertEquals("clearing the crease should restore the capacity",
+				cardsBefore, intField(table, "m_maxCardsDisplay"))
+		assertEquals("clearing the crease should not have rebuilt the cards",
+				widthBefore, intField(table, "m_cardWidth"))
+	}
+
+	/**
+	 * A crease across the whole window is a horizontal fold, and moves nothing.
+	 *
+	 * The activity only sends a vertical hinge, but `0..w` is what a horizontal
+	 * one looks like in these coordinates and neither of its sides is a place a
+	 * hand can go -- so the pane falls back to the whole window rather than
+	 * trusting the filter at the other end. East and west hands have no room to
+	 * move off a horizontal crease either way: `m_maxHeightHand` is as tall as
+	 * the window allows, which is why the horizontal case has nothing to fix.
+	 */
+	@Test
+	fun aCreaseAcrossTheWholeWindowChangesNothing ()
+	{
+		val geometry = GEOMETRIES.first { it.name == "unfolded on its side" }
+		val plain = layOut(geometry)
+		val laid = layOut(geometry, Rect (0, 0, geometry.w, geometry.h))
+
+		assertEquals("south seat", seatPoint(plain, Game.SEAT_SOUTH),
+				seatPoint(laid, Game.SEAT_SOUTH))
+		assertEquals("north seat", seatPoint(plain, Game.SEAT_NORTH),
+				seatPoint(laid, Game.SEAT_NORTH))
+		assertEquals("direction colour", plain.points["m_ptDirColor"],
+				laid.points["m_ptDirColor"])
+		assertEquals("capacity", plain.maxCardsDisplay, laid.maxCardsDisplay)
 	}
 
 	// ------------------------------------------------- the arrangement, and why

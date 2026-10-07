@@ -1065,3 +1065,82 @@ recommended alongside it.
    design pass #13 called out as a decision somebody has to make first
 
  - test count is 255 unit plus 9 instrumented
+
+
+Version 1.4.19               unreleased
+
+Issue #13, closing it: the hinge. Two sub-items were still open at 1.4.17, and one
+of those was a decision rather than a change -- whether the project takes its first
+AndroidX dependency to find out where the crease is. It does. The other, a foldable
+in the emulator matrix, stays declined for the reasons recorded in 1.4.17
+
+ - androidx.window 1.5.1: one implementation line, and the first AndroidX
+   dependency in main source. It is not a preference. android.view has no fold API
+   of any kind -- WindowInsets.Type.displayCutout() is notches and punch-holes and
+   was already handled -- so a FoldingFeature, the only thing that reports where
+   the crease is, comes from this library and nowhere else. The "The app itself is
+   framework-only" comment above the dependencies block now says what is actually
+   true, and the APK grows 4.65MB to 5.10MB for it
+
+ - GameActivity collects WindowInfoTracker's flow in a scope of its own rather
+   than lifecycleScope, because lifecycleScope would mean a second dependency
+   (lifecycle-runtime-ktx) for what one CoroutineScope does. Only a vertical
+   FoldingFeature with non-empty bounds is forwarded, to GameTable.setHinge, and
+   the collector is cancelled in onDestroy. None of it runs in the JVM tests --
+   they build the activity with get() so onCreate never runs -- which is why the
+   layout fixture can hand the hinge to the table directly
+
+ - setHinge recomputes the geometry without the window changing size, which is the
+   point of it: a fold does not re-measure the view, so onSizeChanged never runs.
+   That is why the body of onSizeChanged is now relayout(w, h), called from both.
+   applyCardScale is deliberately not in relayout -- the window has not moved, so
+   the cards have not either, and rebuilding them would resample the art that
+   aChainOfResizesNeverResamplesTheCards exists to protect
+
+ - the crease gives the north and south hands a pane instead of moving them
+   sideways, because sideways does not work. Issue #13 measured the human's hand at
+   647px with the seat at w/2; what it did not have in front of it was
+   m_maxWidthHandHuman, which is 1871px on the unfolded 2208x1840 window -- sized
+   to fill the window, and therefore wider than either side of a crease down the
+   middle of it. A seat pushed clear of the crease puts a long hand off the edge
+   instead. So the roomier side of the crease becomes the pane those two hands
+   live in: their capacity is measured across the pane rather than the window,
+   both seats are centred in it, and everything derived from them -- the winning
+   banner, the emoticons, the badges, the score text, the toast anchor -- moves
+   with them because it is derived from them
+
+ - the cost, measured: cards visible before the scroll takes over drops 27 to 14
+   on the unfolded 2208x1840 and 25 to 11 held upright, at the same 103x160 card.
+   A hand is 7 to 12 cards, so this is the scroll doing what #14 built it for, and
+   the alternative -- halving the cards so the pane can hold them -- is the sparse
+   table #14 already rejected
+
+ - what does not move: east and west are already against the edges, and the piles
+   keep the m_cardWidth / 2 gap they have always left at w/2, which is where the
+   crease sits. That gap is the accommodation #13 gave the pile row, and the test
+   draws the crease exactly as wide as the gap to say it still holds
+
+ - a horizontal crease changes nothing, and that is tested rather than filtered.
+   The activity only sends a vertical hinge, but 0..w is what a horizontal one
+   looks like in these coordinates and neither of its sides is anywhere a hand can
+   go -- the east and west hands are as tall as the window allows -- so the pane
+   falls back to the whole window, which is where the seats were centred to begin
+   with. A phone is in that state permanently: setHinge(null) is the default, and
+   withoutACreaseBothHandsAreCentredOnTheWindow pins it
+
+ - GameTableLayoutTest, 15 tests, 259 unit. The four new ones are the crease:
+   every hand off it at every window in the list, with every anchor still inside
+   the window and the piles still straddling it; the hinge arriving after the
+   first layout, moving the seats and rebuilding neither the cards nor the capacity
+   it took away; a full-width crease moving nothing; and no crease centring both
+   hands. Each of the last three was checked by breaking it on purpose -- a pane
+   that ignores the hinge fails the first, a relayout that calls applyCardScale
+   fails the card-size assertion in the second, and a pane that takes any hinge at
+   all fails the third
+
+ - lint is unchanged: 0 errors, 204 warnings. assembleRelease still minifies
+   clean with the dependency in it, and the window-extensions classes that
+   androidx.window looks up by reflection are in the dex, since losing them is the
+   failure that would only show on a device
+
+ - test count is 259 unit plus 9 instrumented

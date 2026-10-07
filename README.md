@@ -83,13 +83,13 @@ should not be taken as describing what comes out.
 
 The current set is build #128 of version 1.4.16, and this time it was not just for
 currency. The card art was genuinely out of date: the SVG card faces and back have
-been regenerated and rasterised over `res/drawable-*` (e464a7c through d405f31,
-still unreleased), and the previous set is a good record of the defects that
-fixed. On the old shot the back of every card clips the *Hot Death* logo down to
-an orange sliver along the top, and a face-up card draws its label across the big
-rank — "GLASNOST" through the 2, "Reverse" through the R — with the digits
-clipped by the card edge. Both are gone: a back carries the whole logo, and a
-face-up card is a rank with a small index in each corner, labelled or not.
+been regenerated and rasterised over `res/drawable-*` (e464a7c through d405f31),
+and the previous set is a good record of the defects that fixed. On the old shot
+the back of every card clips the *Hot Death* logo down to an orange sliver along
+the top, and a face-up card draws its label across the big rank — "GLASNOST"
+through the 2, "Reverse" through the R — with the digits clipped by the card
+edge. Both are gone: a back carries the whole logo, and a face-up card is a rank
+with a small index in each corner, labelled or not.
 
 The main menu is otherwise identical apart from the clock, and Continue is
 *absent* from it: the emulator is wiped, so there is no saved game and the button

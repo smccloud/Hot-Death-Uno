@@ -843,7 +843,7 @@ Version 1.4.16               2026-10-05
    are there to check
 
 
-Version 1.4.17               unreleased
+Version 1.4.17               2026-10-07
 
  - the table now scales with the window, for the first time. GameTable's
    arrangement has always been window-relative -- all four seats, both piles, the
@@ -937,7 +937,7 @@ Version 1.4.17               unreleased
  - test count is 240 unit plus 9 instrumented
 
 
-Version 1.4.18               unreleased
+Version 1.4.18               2026-10-07
 
 Issue #14, continuing from 1.4.17. That release did the card sizing, the density
 card-count argument and the aspect-ratio arrangement, which covered four of the

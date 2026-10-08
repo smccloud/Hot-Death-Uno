@@ -630,34 +630,44 @@ node {
           # tag is spelled out rather than derived from the API number because
           # Android 17 is published as 37.0/37.1/37.2, not a bare 37.
           #
-          # API 37 is not in this list. Every published 37.x x86_64 image fails
-          # on this controller: 37.0's google_apis build cannot commit a package
-          # install at all, because the session commit needs the
-          # persistent_data_block service (Block Disk Assurance, published by
-          # vold) and that image does not publish it, so the installer dies
-          # mid-commit with "Broken pipe (32)". 37.2's image never finishes
-          # booting -- 176 system_server restarts and counting. Neither is an
-          # app problem: 34-36 run the same APK and all 9 tests pass, and in the
-          # runs where 37 got as far as collecting tests, all 6 PenaltyStackTest
-          # cases passed. The 3 MainLaunchTest failures there targeted
-          # com.smccloud.hotdeath.test, which AGP had already uninstalled, so
-          # they are the same artifact issue #8 records as diagnosis 1 and not
-          # evidence against 37. Issue #8 carries the traces and the untried
-          # images.
+          # All eight published API 37 x86_64 release images are in this list
+          # now, as one experiment rather than one level per build, and every
+          # one of them is in KNOWN_FAILING below so a broken image records
+          # instead of failing the build. What is known, from issue #8:
           #
-          # It cost roughly 30 minutes of boot polling per build to learn that,
-          # so the level is out rather than left parked as known-failing. Add
-          # it back as "37:37.2:google_apis_ps16k" once an image works.
+          #   37.0's google_apis cannot commit a package install at all -- the
+          #   session commit needs the persistent_data_block service (Block
+          #   Disk Assurance, published by vold) and that image does not
+          #   publish it, so the installer dies mid-commit with "install-commit
+          #   ... Broken pipe (32)".
+          #
+          #   37.2's google_apis_ps16k never finishes booting -- 176
+          #   system_server restarts and counting, clean service initialisation
+          #   in the log and no crash, OOM or persistent_data_block error.
+          #
+          # Neither is an app problem: 34-36 run the same APK and all 9 tests
+          # pass, and in the runs where 37 got as far as collecting tests all 6
+          # PenaltyStackTest cases passed. The 3 MainLaunchTest failures there
+          # targeted com.smccloud.hotdeath.test, which AGP had already
+          # uninstalled -- the same artifact issue #8 records as diagnosis 1.
+          #
+          # What those runs did NOT cover: 37.1's two images, which are a
+          # genuinely different build rather than a rebuild of either; 37.0's
+          # google_apis_ps16k and both playstore flavours; and 37.2's
+          # playstore build. All are in the loop now, alongside re-runs of the
+          # two already tested -- the 37.2 ps16k one has moved to revision 6
+          # since it was last tested at revision 5, so that one is a new image
+          # rather than a repeat.
           #
           # Re-checked before every attempt, because the fix is upstream and the
           # way to see it has landed is to compare what is published against what
-          # is installed here. As of 2026-10-02 sdkmanager still publishes
-          # android-37.0;google_apis revision 6 and android-37.2;google_apis_ps16k
-          # revision 5, which are exactly the two revisions installed under
-          # \$SDK/system-images and the two that were tested. No newer image
-          # exists, so restoring the entry now would only repeat the failure.
-          # Re-run the comparison rather than trusting this comment to still
-          # be true.
+          # is installed here. As of 2026-10-08 sdkmanager publishes 37.0
+          # google_apis at revision 6, 37.0 ps16k and playstore_ps16k at
+          # revision 7, both 37.1 images at revision 9, and both 37.2 images at
+          # revision 6. Installed here is 37.0 google_apis revision 6 and 37.2
+          # google_apis_ps16k revision 5, so this stage installs the other six
+          # and one of the two repeats has a newer revision to try. Re-run that
+          # comparison rather than trusting this comment to still be true.
           #
           # The backslash before the SDK reference above is not decoration.
           # Groovy interpolates a dollar inside this block whether or not it sits
@@ -666,27 +676,21 @@ node {
           # fails the whole stage with "No such property: SDK" before a single
           # command runs. It is written here with no dollar at all for the same
           # reason.
-
-          # Untested, and not worth a build each on current evidence: 37.1's
-          # google_apis_ps16k (revision 9), and 37.0's google_apis_playstore and
-          # google_apis_playstore_ps16k. 37.0 and 37.2 already failed two
-          # different ways, so the problem is not confined to one image, but 37.1
-          # is a genuinely different build rather than a rebuild of either.
           #
-          # Note what is NOT there: no android-37.x;default;x86_64 is published at
-          # any revision, so there is no AOSP fallback. An earlier note in TODO.md
-          # named one; it was wrong.
+          # Note what is NOT there: no android-37.x;default;x86_64 is published
+          # at any revision, so there is no AOSP fallback. An earlier note in
+          # TODO.md named one; it was wrong.
           #
           # KNOWN_FAILING is kept because a future level may need it: those
           # levels still run -- they are how we find out when the app starts
           # working on a new platform -- but their results are archived rather
           # than published, so they do not fail the build.
-          KNOWN_FAILING=''
+          KNOWN_FAILING='37'
           ran=''
           skipped=''
           failed=''
           known_failed=''
-          for entry in 34:34 35:35 36:36; do
+          for entry in 34:34 35:35 36:36 37:37.0:google_apis 37:37.0:google_apis_ps16k 37:37.0:google_apis_playstore 37:37.0:google_apis_playstore_ps16k 37:37.1:google_apis_ps16k 37:37.1:google_apis_playstore_ps16k 37:37.2:google_apis_ps16k 37:37.2:google_apis_playstore_ps16k; do
             api="\${entry%%:*}"
             rest="\${entry#*:}"
             tag="\${rest%%:*}"
@@ -741,10 +745,22 @@ node {
                 ;;
             esac
 
-            if [ ! -d "\$SDK/system-images/android-\$tag/google_apis/x86_64" ]; then
+            # Unconditional rather than gated on the directory being there. The
+            # directory test is the fast path, but it is also revision-blind: it
+            # would keep 37.2's google_apis_ps16k at revision 5 forever when
+            # revision 6 is published, which is exactly the swap worth testing.
+            # Requesting an image that is already current is a no-op that costs
+            # a repository fetch, and that is cheaper than silently testing the
+            # image issue #8 already diagnosed.
+            #
+            # The path is the image this entry names, not the plain google_apis
+            # one: several tags carry two or more flavours, and testing only
+            # for the default would skip installing the others and let
+            # avdmanager fail on an image that was never fetched.
+            if [ ! -d "\$SDK/system-images/android-\$tag/\$flavour/x86_64" ]; then
               echo "installing \$IMAGE" >&2
-              "\$SDKMANAGER" --sdk_root="\$SDK" "\$IMAGE" >&2
             fi
+            "\$SDKMANAGER" --sdk_root="\$SDK" "\$IMAGE" >&2
             if [ ! -f "\$AVDHOME/\$AVD.ini" ]; then
               echo "creating AVD \$AVD" >&2
               echo no | "\$AVDMANAGER" create avd -f -n "\$AVD" -k "\$IMAGE" >&2

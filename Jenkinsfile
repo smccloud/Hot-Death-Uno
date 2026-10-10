@@ -1446,4 +1446,18 @@ allowEmptyArchive: false, fingerprint: true
   stage('Remove signing material') {
     removeSigningMaterial()
   }
+      post {
+        always {
+            // Sends an email regardless of success or failure
+            mail to: 'shaun.thomas.mccloud@gmail.com',
+                 subject: "Jenkins Build ${currentBuild.fullDisplayName} Finished",
+                 body: "The build finished. Check details here: ${env.BUILD_URL}"
+        }
+        failure {
+            // Triggers only if the build fails
+            mail to: 'shaun.thomas.mccloud@gmail.com',
+                 subject: "ALERT: Build Failed - ${currentBuild.fullDisplayName}",
+                 body: "Something went wrong! View the log: ${env.BUILD_URL}"
+        }
+    }
 }

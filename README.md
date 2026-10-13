@@ -1,5 +1,7 @@
 # Hot Death Uno
 
+[![Build Status](https://jenkins.smccloud.com/job/Hot-Death-Uno/badge/icon?style=plastic)](https://jenkins.smccloud.com/job/Hot-Death-Uno/)
+
 **An Android implementation of the Hot Death variant of the card game UNO.**
 
 Hot Death UNO is a UNO add-on/variant that layers House Rules and 27 (or more,

@@ -97,6 +97,9 @@ options:
       --no-screenshots
                     skip that stage
                     (default: whatever the job is configured to do)
+      --api37       also run the eight API 37 known-failing emulator images
+      --no-api37    run only the gated API 34-36 matrix
+                    (default: whatever the job is configured to do)
   -h, --help        this text
 EOF
 }
@@ -376,7 +379,7 @@ cmd_build() {
 
 main() {
   local force=0 watch=1 timeout=$DEFAULT_TIMEOUT cmd=build tests=auto
-  local screenshots=auto
+  local screenshots=auto api37=auto
   local -a params=()
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -387,6 +390,8 @@ main() {
       --no-tests) tests=no; shift ;;
       --screenshots) screenshots=yes; shift ;;
       --no-screenshots) screenshots=no; shift ;;
+      --api37) api37=yes; shift ;;
+      --no-api37) api37=no; shift ;;
       --timeout) [ $# -ge 2 ] || die "--timeout needs a value" $EX_USAGE
                  timeout=$2; shift 2 ;;
       --timeout=*) timeout=${1#*=}; shift ;;
@@ -401,10 +406,11 @@ main() {
   # matches the job's parameterDefinitions, which is not a requirement but
   # makes a queue in the UI read in the order the job declares them.
   #
-  # Tri-state for both, as RUN_TESTS was. jenkins.ps1 only has -Screenshots with
-  # no -NoScreenshots, which is enough there because the job's own default is
-  # false; this side sends an explicit false as well, so a build can turn the
-  # stage off on a controller whose default has been changed.
+  # Tri-state for all three, as RUN_TESTS was. jenkins.ps1 only has -Screenshots
+  # with no -NoScreenshots, which is enough there because the job's own default
+  # is false; this side sends an explicit false as well, so a build can turn the
+  # stage off on a controller whose default has been changed. INCLUDE_API37
+  # defaults to true, so only --no-api37 sends it.
   case "$tests" in
     yes) params+=("RUN_TESTS=true") ;;
     no)  params+=("RUN_TESTS=false") ;;
@@ -412,6 +418,10 @@ main() {
   case "$screenshots" in
     yes) params+=("SCREENSHOTS=true") ;;
     no)  params+=("SCREENSHOTS=false") ;;
+  esac
+  case "$api37" in
+    yes) params+=("INCLUDE_API37=true") ;;
+    no)  params+=("INCLUDE_API37=false") ;;
   esac
 
   # Precedence, lowest last: env, then the creds file, then these.

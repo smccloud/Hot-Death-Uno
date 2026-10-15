@@ -25,6 +25,13 @@
     whole extra emulator boot and nothing in the build depends on it, so it is
     only worth turning on when those images actually need refreshing.
 
+.PARAMETER NoApi37
+    Skip the eight API 37 known-failing emulator images and run only the gated
+    API 34-36 matrix. Given to the job as INCLUDE_API37=false. The API 37 images
+    are on by default because they are how the app's support for a new platform
+    gets noticed; this is the switch for when they are too expensive or too
+    unstable to let the gated matrix finish.
+
 .EXAMPLE
     .\jenkins.ps1 login
     .\jenkins.ps1 status
@@ -51,6 +58,10 @@ param(
     [switch] $NoTests,
 
     [switch] $Screenshots,
+
+    # INCLUDE_API37 defaults true on the job, so the useful switch here is the
+    # negative one: only -NoApi37 sends the parameter, to drop the API 37 images.
+    [switch] $NoApi37,
 
     [string] $StorePath = $(if ($env:JENKINS_CREDS) { $env:JENKINS_CREDS } else { Join-Path $PSScriptRoot 'jenkins-creds.xml' })
 )
@@ -155,6 +166,9 @@ switch ($Command) {
         # SCREENSHOTS is only sent when asked for, because the job defaults it to
         # false and sending it explicitly on every build would be noise.
         if ($Screenshots) { $body['SCREENSHOTS'] = 'true'; $label += ' SCREENSHOTS=true' }
+        # INCLUDE_API37 likewise: only the off case is worth sending, since the
+        # job already defaults it to true.
+        if ($NoApi37) { $body['INCLUDE_API37'] = 'false'; $label += ' INCLUDE_API37=false' }
 
         if ($body.Count -gt 0) {
             # ContentType stated rather than left to PS 5.1 to guess: a hashtable

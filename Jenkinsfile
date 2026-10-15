@@ -53,7 +53,22 @@ properties([[$class: 'BuildDiscarderProperty',
                 [$class: 'BooleanParameterDefinition',
                  name: 'SCREENSHOTS',
                  defaultValue: false,
-                 description: 'Boot an emulator, drive the app, and archive the README screenshots. Off = skip entirely.']
+                 description: 'Boot an emulator, drive the app, and archive the README screenshots. Off = skip entirely.'],
+                // The eight API 37 system images are all in KNOWN_FAILING: they
+                // record rather than gate. They are also what makes this build
+                // long -- each installs a fresh multi-hundred-MB system image and
+                // builds a 6GB data partition, all under /var/lib/jenkins. On
+                // 2026-10-15 that directory is an iSCSI LUN whose mount the
+                // Jenkins service depends on, and builds #146/#147 were killed
+                // when the controller restarted mid-matrix (see the emulator
+                // stage). This switch drops the API 37 experiment so the gated
+                // API 34-36 matrix can still return a verdict while that
+                // infrastructure problem is sorted out. Default true, so the
+                // normal run is unchanged.
+                [$class: 'BooleanParameterDefinition',
+                 name: 'INCLUDE_API37',
+                 defaultValue: true,
+                 description: 'Run the eight API 37 known-failing images too. Off = the gated API 34-36 matrix only.']
               ]]])
 
 node {
@@ -106,6 +121,17 @@ node {
   // before the parameter existed.
   def screenshots = (params.SCREENSHOTS == true) || (params.SCREENSHOTS == 'true')
   echo "SCREENSHOTS=${screenshots}"
+  // Same three states again. Defaults to true when absent so a run queued
+  // before the parameter existed behaves like every earlier run.
+  def includeApi37 = (params.INCLUDE_API37 == true) || (params.INCLUDE_API37 == 'true')
+  echo "INCLUDE_API37=${includeApi37}"
+  // The whole matrix lives in one string so the shell loop below has a single
+  // source of truth. API 34-36 are the gate; the eight API 37 images are the
+  // known-failing experiment that INCLUDE_API37 adds.
+  def matrixEntries = '34:34 35:35 36:36'
+  if (includeApi37) {
+    matrixEntries += ' 37:37.0:google_apis 37:37.0:google_apis_ps16k 37:37.0:google_apis_playstore 37:37.0:google_apis_playstore_ps16k 37:37.1:google_apis_ps16k 37:37.1:google_apis_playstore_ps16k 37:37.2:google_apis_ps16k 37:37.2:google_apis_playstore_ps16k'
+  }
 
   // Destroys the signing material, wherever it happens to be. Defined once and
   // called at both ends of the run: the pre-clean and the teardown have to agree
@@ -693,12 +719,17 @@ node {
           # levels still run -- they are how we find out when the app starts
           # working on a new platform -- but their results are archived rather
           # than published, so they do not fail the build.
+          #
+          # The entry list itself is Groovy, not shell: it is built above from
+          # INCLUDE_API37 and interpolated here, so OFF drops all eight API 37
+          # images and leaves the gated API 34-36 matrix. The whole discussion
+          # above describes the default (ON) run.
           KNOWN_FAILING='37'
           ran=''
           skipped=''
           failed=''
           known_failed=''
-          for entry in 34:34 35:35 36:36 37:37.0:google_apis 37:37.0:google_apis_ps16k 37:37.0:google_apis_playstore 37:37.0:google_apis_playstore_ps16k 37:37.1:google_apis_ps16k 37:37.1:google_apis_playstore_ps16k 37:37.2:google_apis_ps16k 37:37.2:google_apis_playstore_ps16k; do
+          for entry in ${matrixEntries}; do
             api="\${entry%%:*}"
             rest="\${entry#*:}"
             tag="\${rest%%:*}"

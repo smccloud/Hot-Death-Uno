@@ -57,6 +57,7 @@ properties([[$class: 'BuildDiscarderProperty',
               ]]])
 
 node {
+  try {
   def moduleDir = 'com.smccloud.hotdeath'
   // 9.5.0, not the 9.8.0 that is current: Kotlin 2.4.20 below supports Gradle
   // 7.6.3-9.5.0 and no further, so 9.5.0 is the top of what the Kotlin plugin
@@ -1437,27 +1438,22 @@ allowEmptyArchive: false, fingerprint: true
   }
 
   // Destroy the signing material, which is a plaintext keystore password in the
-  // workspace. This runs on the way out of a successful pipeline only -- a
-  // pipeline-level `post` is not valid inside `node`, and wrapping every stage
-  // in try/finally to get the same guarantee is not worth reindenting 600 lines
-  // over. The Signing material stage pre-cleans before it writes, so the
-  // residual risk is a failed build leaving the file on disk until the next run,
-  // never a stale key being used.
+  // workspace. This runs on the way out of a successful pipeline only. The
+  // Signing material stage pre-cleans before it writes, so the residual risk is
+  // a failed build leaving the file on disk until the next run, never a stale
+  // key being used.
   stage('Remove signing material') {
     removeSigningMaterial()
   }
-      post {
-        always {
-            // Sends an email regardless of success or failure
-            mail to: 'shaun.thomas.mccloud@gmail.com',
-                 subject: "Jenkins Build ${currentBuild.fullDisplayName} Finished",
-                 body: "The build finished. Check details here: ${env.BUILD_URL}"
-        }
-        failure {
-            // Triggers only if the build fails
-            mail to: 'shaun.thomas.mccloud@gmail.com',
-                 subject: "ALERT: Build Failed - ${currentBuild.fullDisplayName}",
-                 body: "Something went wrong! View the log: ${env.BUILD_URL}"
-        }
-    }
+  } catch (err) {
+    currentBuild.result = 'FAILURE'
+    mail to: 'shaun.thomas.mccloud@gmail.com',
+         subject: "ALERT: Build Failed - ${currentBuild.fullDisplayName}",
+         body: "Something went wrong! View the log: ${env.BUILD_URL}"
+    throw err
+  } finally {
+    mail to: 'shaun.thomas.mccloud@gmail.com',
+         subject: "Jenkins Build ${currentBuild.fullDisplayName} Finished",
+         body: "The build finished. Check details here: ${env.BUILD_URL}"
+  }
 }

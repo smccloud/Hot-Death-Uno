@@ -595,6 +595,13 @@ node {
           SDK="\$ANDROID_HOME"
           AVDHOME="\$CACHE/avd"
           ADB="\$SDK/platform-tools/adb"
+          # Every adb read of device state below is bounded. An emulator that
+          # has died mid-check leaves adb holding a transport that never
+          # answers, and an unbounded logcat -d then blocks the whole matrix
+          # forever -- build #145 sat on one for an hour after the api37
+          # playstore_ps16k image died. -k escalates to SIGKILL so a wedged adb
+          # cannot outlive the bound either.
+          ADB_TMO="timeout -k 10 90"
           EMU="\$SDK/emulator/emulator"
           SDKMANAGER="\$SDK/cmdline-tools/latest/bin/sdkmanager"
           AVDMANAGER="\$SDK/cmdline-tools/latest/bin/avdmanager"
@@ -852,7 +859,7 @@ node {
             done
             if [ "\$booted" != '1' ]; then
               echo "\$AVD did not finish booting" >&2
-              "\$ADB" devices >&2 || true
+              \$ADB_TMO "\$ADB" devices >&2 || true
               tail -c 2000 "\$CACHE/emulator-\$AVD.log" >&2 || true
               # A level that never settles is the likeliest thing to need
               # reading later, and this is the only place its device log
@@ -861,7 +868,7 @@ node {
               # survives a failed build; the archived report never gets
               # written when we exit here.
               echo "--- \$AVD: crashes and low-memory kills ---" >&2
-              "\$ADB" logcat -d -v brief 2>&1 \\
+              \$ADB_TMO "\$ADB" logcat -d -v brief 2>&1 \\
                 | grep -iE 'FATAL|AndroidRuntime|watchdog|lowmemorykiller|kswapd|Out of memory|oom|system_server.*(died|kill)|SystemServer' \\
                 | tail -60 >&2 || true
               echo "--- \$AVD: end device log ---" >&2
@@ -896,37 +903,37 @@ node {
                 echo "=== \$AVD (API \$api): can this platform launch the app? ==="
                 echo
                 echo "--- install the app ---"
-                "\$ADB" install -r -t "\$APP_APK" 2>&1
+                \$ADB_TMO "\$ADB" install -r -t "\$APP_APK" 2>&1
                 echo
                 echo "--- installed? ---"
-                "\$ADB" shell pm path com.smccloud.hotdeath 2>&1
+                \$ADB_TMO "\$ADB" shell pm path com.smccloud.hotdeath 2>&1
                 echo
                 echo "--- registered launcher entries for this package ---"
-                "\$ADB" shell cmd package query-activities \\
+                \$ADB_TMO "\$ADB" shell cmd package query-activities \\
                   -a android.intent.action.MAIN \\
                   -c android.intent.category.LAUNCHER \\
                   com.smccloud.hotdeath 2>&1 | head -20
                 echo
                 echo "--- can the platform resolve the launcher entry? ---"
-                "\$ADB" shell cmd package resolve-activity \\
+                \$ADB_TMO "\$ADB" shell cmd package resolve-activity \\
                   --brief -a android.intent.action.MAIN \\
                   -c android.intent.category.LAUNCHER \\
                   com.smccloud.hotdeath 2>&1
                 echo
                 echo "--- am start, by explicit component ---"
-                "\$ADB" shell am start -W -n com.smccloud.hotdeath/.Main 2>&1
+                \$ADB_TMO "\$ADB" shell am start -W -n com.smccloud.hotdeath/.Main 2>&1
                 echo
                 echo "--- platform refusals ---"
                 # Exceptions, not just their call frames. A grep for the service
                 # names catches the tail of a stack trace but drops the
                 # exception and message above it, which is the part that says
                 # why the install was refused.
-                "\$ADB" logcat -d -v brief 2>&1 \\
+                \$ADB_TMO "\$ADB" logcat -d -v brief 2>&1 \\
                   | grep -iE 'ActivityManager|ActivityTaskManager|PackageManager|SystemServiceRegistry|hotdeath' \\
                   | tail -80
                 echo
                 echo "--- crashes and low-memory kills ---"
-                "\$ADB" logcat -d -v brief 2>&1 \\
+                \$ADB_TMO "\$ADB" logcat -d -v brief 2>&1 \\
                   | grep -iE 'FATAL|AndroidRuntime|watchdog|lowmemorykiller|kswapd|Out of memory|oom' \\
                   | tail -40
               } > "\$DIAG/report.txt" 2>&1 || true
@@ -1027,21 +1034,21 @@ node {
             # window, so the next level would have booted alongside it. So
             # escalate rather than hope: kill the console, then the process,
             # then force it, and only believe the list once it is empty.
-            "\$ADB" emu kill > /dev/null 2>&1 || true
+            \$ADB_TMO "\$ADB" emu kill > /dev/null 2>&1 || true
             kill "\$EMU_PID" > /dev/null 2>&1 || true
             torn_down=0
             attempt=0
             while [ "\$attempt" -lt 30 ]; do
               attempt=\$((attempt + 1))
-              if [ -z "\$("\$ADB" devices | awk '\$1 ~ /^emulator-/' || true)" ]; then
+              if [ -z "\$(\$ADB_TMO "\$ADB" devices | awk '\$1 ~ /^emulator-/' || true)" ]; then
                 torn_down=1
                 break
               fi
               sleep 2
               # Past the halfway point, stop asking nicely.
               if [ "\$attempt" = 15 ]; then
-                "\$ADB" kill-server > /dev/null 2>&1 || true
-                "\$ADB" start-server > /dev/null 2>&1 || true
+                \$ADB_TMO "\$ADB" kill-server > /dev/null 2>&1 || true
+                \$ADB_TMO "\$ADB" start-server > /dev/null 2>&1 || true
                 kill -9 "\$EMU_PID" > /dev/null 2>&1 || true
                 # Anything still holding emulator-* after our kill is not ours.
                 for pid in \$(pgrep -f 'qemu-system' || true); do
@@ -1061,7 +1068,7 @@ node {
             # is supposed to be gating, so fail here rather than report it.
             if [ "\$torn_down" != '1' ]; then
               echo "\$AVD did not shut down; refusing to run the next level" >&2
-              "\$ADB" devices >&2 || true
+              \$ADB_TMO "\$ADB" devices >&2 || true
               exit 1
             fi
           done

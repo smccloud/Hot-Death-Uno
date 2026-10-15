@@ -121,8 +121,12 @@ node {
   // before the parameter existed.
   def screenshots = (params.SCREENSHOTS == true) || (params.SCREENSHOTS == 'true')
   echo "SCREENSHOTS=${screenshots}"
-  // Same three states again. Defaults to true when absent so a run queued
-  // before the parameter existed behaves like every earlier run.
+  // Same three states again, and the same convention as RUN_TESTS above: true,
+  // false, or absent on a run queued before the parameter existed. Absent reads
+  // as false here -- the gated API 34-36 matrix -- which is the safe default for
+  // the stage that destabilizes this controller, and is harmless once the
+  // parameter is registered: its own default is true, so an ordinary run still
+  // brings the API 37 images back.
   def includeApi37 = (params.INCLUDE_API37 == true) || (params.INCLUDE_API37 == 'true')
   echo "INCLUDE_API37=${includeApi37}"
   // The whole matrix lives in one string so the shell loop below has a single
